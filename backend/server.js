@@ -79,8 +79,16 @@ function isLocalNetwork(ip) {
 }
 
 function authMiddleware(req, res, next) {
-  if (!AUTH_PASSWORD) return next();
-  if (isLocalNetwork(req.ip)) return next();
+  if (!AUTH_PASSWORD) {
+    console.log(`Auth: no password configured, allowing request`);
+    return next();
+  }
+
+  const clientIp = req.ip;
+  const forwarded = req.headers['x-forwarded-for'];
+  console.log(`Auth: ip=${clientIp}, x-forwarded-for=${forwarded}, local=${isLocalNetwork(clientIp)}`);
+
+  if (isLocalNetwork(clientIp)) return next();
 
   const token = req.headers.authorization?.replace('Bearer ', '');
   if (token && authTokens.has(token)) return next();
