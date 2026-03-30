@@ -65,10 +65,12 @@ app.use('/api/', apiLimiter);
 
 // --- Authentication ---
 const AUTH_PASSWORD = process.env.AUTH_PASSWORD || '';
-const LOCAL_SUBNETS = (process.env.LOCAL_SUBNETS || '192.168.,10.,172.16.,172.17.,172.18.,172.19.,172.20.,172.21.,172.22.,172.23.,172.24.,172.25.,172.26.,172.27.,172.28.,172.29.,172.30.,172.31.').split(',');
+const LOCAL_SUBNETS = (process.env.LOCAL_SUBNETS || '192.168.,10.').split(',');
 const authTokens = new Set();
 
-app.set('trust proxy', true);
+// Number of trusted proxy hops (Caddy -> nginx = 2)
+const trustProxy = Number(process.env.TRUST_PROXY) || 2;
+app.set('trust proxy', trustProxy);
 
 function isLocalNetwork(ip) {
   const normalized = ip.replace(/^::ffff:/, '');
