@@ -78,17 +78,23 @@ function isLocalNetwork(ip) {
   return LOCAL_SUBNETS.some(subnet => normalized.startsWith(subnet));
 }
 
-function authMiddleware(req, res, next) {
-  if (!AUTH_PASSWORD) {
-    console.log(`Auth: no password configured, allowing request`);
-    return next();
-  }
-
-  const clientIp = req.ip;
+function isRequestLocal(req) {
+  // Check all IPs in the proxy chain — if any hop is external, treat as external
   const forwarded = req.headers['x-forwarded-for'];
-  console.log(`Auth: ip=${clientIp}, x-forwarded-for=${forwarded}, local=${isLocalNetwork(clientIp)}`);
+  if (forwarded) {
+    const ips = forwarded.split(',').map(ip => ip.trim());
+    if (ips.some(ip => !isLocalNetwork(ip))) return false;
+  }
+  return isLocalNetwork(req.ip);
+}
 
-  if (isLocalNetwork(clientIp)) return next();
+function authMiddleware(req, res, next) {
+  if (!AUTH_PASSWORD) return next();
+
+  const local = isRequestLocal(req);
+  console.log(`Auth: ip=${req.ip}, x-forwarded-for=${req.headers['x-forwarded-for']}, local=${local}`);
+
+  if (local) return next();
 
   const token = req.headers.authorization?.replace('Bearer ', '');
   if (token && authTokens.has(token)) return next();
@@ -115,7 +121,7 @@ app.post('/api/auth/login', (req, res) => {
 // Check auth status
 app.get('/api/auth/status', (req, res) => {
   if (!AUTH_PASSWORD) return res.json({ authenticated: true, local: true });
-  if (isLocalNetwork(req.ip)) return res.json({ authenticated: true, local: true });
+  if (isRequestLocal(req)) return res.json({ authenticated: true, local: true });
 
   const token = req.headers.authorization?.replace('Bearer ', '');
   if (token && authTokens.has(token)) return res.json({ authenticated: true, local: false });
