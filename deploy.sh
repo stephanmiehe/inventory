@@ -35,15 +35,20 @@ else
     chown -R "$APP_USER:$APP_USER" "$APP_DIR"
 fi
 
-# Install dependencies from workspace root
+# Install dependencies (including dev for build)
 echo "==> Installing dependencies..."
 cd "$APP_DIR"
-sudo -u "$APP_USER" npm ci --omit=dev
+sudo -u "$APP_USER" npm ci
 
 # Build frontend
 echo "==> Building frontend..."
 cd "$APP_DIR/frontend"
 sudo -u "$APP_USER" npx vite build
+
+# Prune dev dependencies
+echo "==> Pruning dev dependencies..."
+cd "$APP_DIR"
+sudo -u "$APP_USER" npm prune --omit=dev
 
 # Set up backend .env if missing
 if [ ! -f "$APP_DIR/backend/.env" ]; then
