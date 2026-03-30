@@ -61,6 +61,13 @@ function BarcodeScanner({ onScan, disabled }) {
     };
   }, []);
 
+  // Auto-start scanning when camera is available
+  useEffect(() => {
+    if (selectedCamera && !disabled) {
+      startScanning();
+    }
+  }, [selectedCamera]);
+
   const startScanning = async () => {
     if (!selectedCamera) {
       alert('Keine Kamera verfügbar');
@@ -150,36 +157,20 @@ function BarcodeScanner({ onScan, disabled }) {
         </div>
       )}
 
-      {cameras.length > 0 && (
+      {cameras.length > 1 && (
         <div className="camera-controls">
-          {cameras.length > 1 && (
-            <select
-              value={selectedCamera || ''}
-              onChange={(e) => setSelectedCamera(e.target.value)}
-              disabled={isScanning}
-              className="camera-select"
-            >
-              {cameras.map((camera) => (
-                <option key={camera.id} value={camera.id}>
-                  {camera.label}
-                </option>
-              ))}
-            </select>
-          )}
-          
-          {!isScanning ? (
-            <button
-              onClick={startScanning}
-              disabled={disabled}
-              className="btn btn-primary"
-            >
-              📷 Kamera starten
-            </button>
-          ) : (
-            <button onClick={stopScanning} className="btn btn-secondary">
-              ⏹ Kamera stoppen
-            </button>
-          )}
+          <select
+            value={selectedCamera || ''}
+            onChange={(e) => setSelectedCamera(e.target.value)}
+            disabled={isScanning}
+            className="camera-select"
+          >
+            {cameras.map((camera) => (
+              <option key={camera.id} value={camera.id}>
+                {camera.label}
+              </option>
+            ))}
+          </select>
         </div>
       )}
 
