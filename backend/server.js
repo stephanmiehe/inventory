@@ -2,6 +2,7 @@ import express from 'express';
 import cors from 'cors';
 import fetch from 'node-fetch';
 import dotenv from 'dotenv';
+import crypto from 'crypto';
 import { existsSync, mkdirSync } from 'fs';
 import multer from 'multer';
 import path from 'path';
@@ -61,6 +62,60 @@ const apiLimiter = rateLimit({
   message: { error: 'Zu viele Anfragen, bitte später erneut versuchen' }
 });
 app.use('/api/', apiLimiter);
+
+// --- Authentication ---
+const AUTH_PASSWORD = process.env.AUTH_PASSWORD || '';
+const LOCAL_SUBNETS = (process.env.LOCAL_SUBNETS || '192.168.,10.,172.16.,172.17.,172.18.,172.19.,172.20.,172.21.,172.22.,172.23.,172.24.,172.25.,172.26.,172.27.,172.28.,172.29.,172.30.,172.31.').split(',');
+const authTokens = new Set();
+
+app.set('trust proxy', true);
+
+function isLocalNetwork(ip) {
+  const normalized = ip.replace(/^::ffff:/, '');
+  if (normalized === '127.0.0.1' || normalized === '::1' || normalized === 'localhost') return true;
+  return LOCAL_SUBNETS.some(subnet => normalized.startsWith(subnet));
+}
+
+function authMiddleware(req, res, next) {
+  if (!AUTH_PASSWORD) return next();
+  if (isLocalNetwork(req.ip)) return next();
+
+  const token = req.headers.authorization?.replace('Bearer ', '');
+  if (token && authTokens.has(token)) return next();
+
+  return res.status(401).json({ error: 'Nicht autorisiert' });
+}
+
+// Login endpoint (no auth required)
+app.post('/api/auth/login', (req, res) => {
+  if (!AUTH_PASSWORD) {
+    return res.json({ token: 'none', message: 'Keine Authentifizierung erforderlich' });
+  }
+
+  const { password } = req.body;
+  if (!password || password !== AUTH_PASSWORD) {
+    return res.status(401).json({ error: 'Falsches Passwort' });
+  }
+
+  const token = crypto.randomBytes(32).toString('hex');
+  authTokens.add(token);
+  res.json({ token });
+});
+
+// Check auth status
+app.get('/api/auth/status', (req, res) => {
+  if (!AUTH_PASSWORD) return res.json({ authenticated: true, local: true });
+  if (isLocalNetwork(req.ip)) return res.json({ authenticated: true, local: true });
+
+  const token = req.headers.authorization?.replace('Bearer ', '');
+  if (token && authTokens.has(token)) return res.json({ authenticated: true, local: false });
+
+  return res.json({ authenticated: false, local: false });
+});
+
+// Apply auth to all API routes except login/status
+app.use('/api/', authMiddleware);
+app.use('/uploads', authMiddleware);
 
 // Serve uploaded images
 const UPLOADS_DIR = 'uploads';

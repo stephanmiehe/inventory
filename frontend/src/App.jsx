@@ -3,9 +3,64 @@ import BarcodeScanner from './components/BarcodeScanner';
 import Inventory from './components/Inventory';
 import ShoppingList from './components/ShoppingList';
 import { ProductModal, ProductEditForm, ScanOutModal } from './components/ProductModal';
+import { authFetch } from './authFetch';
 import './App.css';
 
+function LoginScreen({ onLogin }) {
+  const [password, setPassword] = useState('');
+  const [error, setError] = useState(null);
+  const [loading, setLoading] = useState(false);
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setLoading(true);
+    setError(null);
+    try {
+      const response = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password }),
+      });
+      const data = await response.json();
+      if (response.ok) {
+        localStorage.setItem('authToken', data.token);
+        onLogin();
+      } else {
+        setError(data.error || 'Anmeldung fehlgeschlagen');
+      }
+    } catch {
+      setError('Verbindung fehlgeschlagen');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="login-screen">
+      <div className="login-card">
+        <h1>🔒 Vorratsverwaltung</h1>
+        <p>Bitte Passwort eingeben</p>
+        <form onSubmit={handleSubmit}>
+          <input
+            type="password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            placeholder="Passwort"
+            autoFocus
+            disabled={loading}
+          />
+          <button type="submit" disabled={loading || !password}>
+            {loading ? 'Anmelden…' : 'Anmelden'}
+          </button>
+        </form>
+        {error && <div className="login-error">{error}</div>}
+      </div>
+    </div>
+  );
+}
+
 function App() {
+  const [authenticated, setAuthenticated] = useState(null);
   const [inventory, setInventory] = useState([]);
   const [activeTab, setActiveTab] = useState('scan-in');
   const [message, setMessage] = useState(null);
@@ -28,10 +83,19 @@ function App() {
     localStorage.setItem('darkMode', darkMode);
   }, [darkMode]);
 
+  // Check auth status on mount
+  useEffect(() => {
+    authFetch('/api/auth/status')
+      .then(r => r.json())
+      .then(data => setAuthenticated(data.authenticated))
+      .catch(() => setAuthenticated(false));
+  }, []);
+
   const loadInventory = async () => {
     try {
       setInventoryError(null);
-      const response = await fetch('/api/inventory');
+      const response = await authFetch('/api/inventory');
+      if (response.status === 401) { setAuthenticated(false); return; }
       if (!response.ok) throw new Error('Laden fehlgeschlagen');
       const data = await response.json();
       setInventory(data);
@@ -42,11 +106,12 @@ function App() {
   };
 
   useEffect(() => {
+    if (authenticated !== true) return;
     loadInventory();
     // Auto-refresh every 30 seconds for multi-user support
     const interval = setInterval(loadInventory, 30000);
     return () => clearInterval(interval);
-  }, []);
+  }, [authenticated]);
 
   const handleScan = async (barcode, action) => {
     setLoading(true);
@@ -55,7 +120,7 @@ function App() {
     try {
       if (action === 'in') {
         // Lookup the product first and show confirmation
-        const response = await fetch('/api/products/lookup', {
+        const response = await authFetch('/api/products/lookup', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ barcode }),
@@ -77,7 +142,7 @@ function App() {
         }
       } else {
         // For scan-out, look up product and show quantity modal
-        const response = await fetch('/api/products/lookup', {
+        const response = await authFetch('/api/products/lookup', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ barcode }),
@@ -114,7 +179,7 @@ function App() {
     setShowModal(false);
 
     try {
-      const response = await fetch('/api/inventory/scan-in', {
+      const response = await authFetch('/api/inventory/scan-in', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ barcode: scannedBarcode, quantity }),
@@ -144,7 +209,7 @@ function App() {
     setShowScanOutModal(false);
 
     try {
-      const response = await fetch('/api/inventory/scan-out', {
+      const response = await authFetch('/api/inventory/scan-out', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ barcode: scannedBarcode, quantity }),
@@ -179,7 +244,7 @@ function App() {
     setShowEditForm(false);
 
     try {
-      const updateResponse = await fetch('/api/products/update', {
+      const updateResponse = await authFetch('/api/products/update', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ barcode: scannedBarcode, ...editedData }),
@@ -189,7 +254,7 @@ function App() {
         throw new Error('Failed to update product');
       }
 
-      const response = await fetch('/api/inventory/scan-in', {
+      const response = await authFetch('/api/inventory/scan-in', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ barcode: scannedBarcode }),
@@ -219,6 +284,14 @@ function App() {
     setScannedBarcode(null);
     setScanOutMaxQty(1);
   };
+
+  if (authenticated === null) {
+    return <div className="login-screen"><div className="login-card"><p>Laden…</p></div></div>;
+  }
+
+  if (authenticated === false) {
+    return <LoginScreen onLogin={() => setAuthenticated(true)} />;
+  }
 
   return (
     <div className="app">

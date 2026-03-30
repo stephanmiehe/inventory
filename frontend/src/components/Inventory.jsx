@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
+import { authFetch } from '../authFetch';
 import ProductFormFields from './ProductFormFields';
 import './Inventory.css';
 
@@ -46,7 +47,7 @@ function Inventory({ inventory, onRefresh, setInventory }) {
     );
 
     try {
-      await fetch('/api/inventory/set-quantity', {
+      await authFetch('/api/inventory/set-quantity', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ barcode, quantity }),
@@ -59,7 +60,7 @@ function Inventory({ inventory, onRefresh, setInventory }) {
 
   const handleDelete = async (barcode) => {
     try {
-      const response = await fetch(`/api/inventory/${barcode}`, {
+      const response = await authFetch(`/api/inventory/${barcode}`, {
         method: 'DELETE',
       });
       if (response.ok) {
@@ -84,7 +85,7 @@ function Inventory({ inventory, onRefresh, setInventory }) {
 
   const handleSaveProduct = async (barcode) => {
     try {
-      const response = await fetch('/api/products/update', {
+      const response = await authFetch('/api/products/update', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ barcode, ...editForm }),

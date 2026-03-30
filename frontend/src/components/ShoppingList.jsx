@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { authFetch } from '../authFetch';
 import './ShoppingList.css';
 
 function ShoppingList({ refreshKey }) {
@@ -9,7 +10,7 @@ function ShoppingList({ refreshKey }) {
   const loadShoppingList = async () => {
     setError(null);
     try {
-      const response = await fetch('/api/shopping-list');
+      const response = await authFetch('/api/shopping-list');
       if (!response.ok) throw new Error('Laden fehlgeschlagen');
       const data = await response.json();
       setItems(data);
@@ -58,7 +59,7 @@ function ShoppingList({ refreshKey }) {
 
   const handleRemoveFromList = async (item) => {
     try {
-      const response = await fetch('/api/products/set-ideal-stock', {
+      const response = await authFetch('/api/products/set-ideal-stock', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ barcode: item.barcode, ideal_stock: item.current_stock }),

@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { authFetch } from '../authFetch';
 import './ProductFormFields.css';
 
 function ProductFormFields({ formData, setFormData, barcode, showBarcode = false }) {
@@ -13,7 +14,7 @@ function ProductFormFields({ formData, setFormData, barcode, showBarcode = false
       const uploadData = new FormData();
       uploadData.append('image', file);
 
-      const response = await fetch('/api/upload', {
+      const response = await authFetch('/api/upload', {
         method: 'POST',
         body: uploadData,
       });
