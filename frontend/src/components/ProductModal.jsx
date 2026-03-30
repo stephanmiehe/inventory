@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useRef, useCallback, useEffect } from 'react';
 import ProductFormFields from './ProductFormFields';
 import { authFetch } from '../authFetch';
 import './ProductModal.css';
@@ -67,16 +67,58 @@ function ProductEditForm({ barcode, initialProduct, onSave, onCancel }) {
   });
   const [recognizing, setRecognizing] = useState(false);
   const [recognizeError, setRecognizeError] = useState(null);
+  const [cameraOpen, setCameraOpen] = useState(false);
+  const videoRef = useRef(null);
+  const streamRef = useRef(null);
+  const canvasRef = useRef(null);
 
-  const handleRecognize = async (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
+  const stopCamera = useCallback(() => {
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach(t => t.stop());
+      streamRef.current = null;
+    }
+    setCameraOpen(false);
+  }, []);
 
-    setRecognizing(true);
+  // Clean up camera on unmount
+  useEffect(() => stopCamera, [stopCamera]);
+
+  const startCamera = async () => {
     setRecognizeError(null);
     try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 960 } }
+      });
+      streamRef.current = stream;
+      setCameraOpen(true);
+      // Wait for ref to be attached after render
+      requestAnimationFrame(() => {
+        if (videoRef.current) {
+          videoRef.current.srcObject = stream;
+        }
+      });
+    } catch {
+      setRecognizeError('Kamera konnte nicht geöffnet werden');
+    }
+  };
+
+  const captureAndRecognize = async () => {
+    if (!videoRef.current) return;
+
+    const video = videoRef.current;
+    const canvas = canvasRef.current;
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+    canvas.getContext('2d').drawImage(video, 0, 0);
+
+    stopCamera();
+    setRecognizing(true);
+    setRecognizeError(null);
+
+    try {
+      const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/jpeg', 0.85));
       const uploadData = new FormData();
-      uploadData.append('image', file);
+      uploadData.append('image', blob, 'capture.jpg');
 
       const response = await authFetch('/api/recognize', {
         method: 'POST',
@@ -115,19 +157,24 @@ function ProductEditForm({ barcode, initialProduct, onSave, onCancel }) {
         
         <form onSubmit={handleSubmit} className="product-form">
           <div className="recognize-section">
-            <label className="recognize-btn">
-              {recognizing ? '⏳ Wird erkannt…' : '📸 Produkt fotografieren'}
-              <input
-                type="file"
-                accept="image/*"
-                capture="environment"
-                onChange={handleRecognize}
-                disabled={recognizing}
-                hidden
-              />
-            </label>
-            <span className="recognize-hint">Foto aufnehmen, um Produktdaten automatisch zu erkennen</span>
+            {cameraOpen ? (
+              <div className="camera-viewfinder">
+                <video ref={videoRef} autoPlay playsInline muted className="camera-video" />
+                <div className="camera-controls">
+                  <button type="button" onClick={stopCamera} className="btn btn-cancel camera-cancel-btn">✕</button>
+                  <button type="button" onClick={captureAndRecognize} className="camera-shutter" />
+                </div>
+              </div>
+            ) : (
+              <>
+                <button type="button" onClick={startCamera} className="recognize-btn" disabled={recognizing}>
+                  {recognizing ? '⏳ Wird erkannt…' : '📸 Produkt fotografieren'}
+                </button>
+                <span className="recognize-hint">Foto aufnehmen, um Produktdaten automatisch zu erkennen</span>
+              </>
+            )}
             {recognizeError && <p className="recognize-error">{recognizeError}</p>}
+            <canvas ref={canvasRef} hidden />
           </div>
 
           <ProductFormFields
