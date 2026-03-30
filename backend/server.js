@@ -171,9 +171,14 @@ async function lookupProduct(barcode) {
 
     console.log(`MongoDB: found document for code "${barcode}", product_name="${doc.product_name}", brands="${doc.brands}"`);
 
-    const name = sanitizeString(doc.product_name) || '';
+    const name = sanitizeString(doc.product_name)
+      || sanitizeString(doc.product_name_es)
+      || sanitizeString(doc.product_name_en)
+      || sanitizeString(doc.product_name_de)
+      || sanitizeString(doc.product_name_xx)
+      || '';
     if (!name) {
-      console.log(`MongoDB: document for "${barcode}" has no product_name, skipping`);
+      console.log(`MongoDB: document for "${barcode}" has no product_name in any language, skipping`);
       return null;
     }
 
