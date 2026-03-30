@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import ProductFormFields from './ProductFormFields';
+import { authFetch } from '../authFetch';
 import './ProductModal.css';
 
 function ProductModal({ product, barcode, onConfirm, onEdit, onCancel }) {
@@ -64,6 +65,43 @@ function ProductEditForm({ barcode, initialProduct, onSave, onCancel }) {
     brand: initialProduct?.brand || '',
     image_url: initialProduct?.image_url || ''
   });
+  const [recognizing, setRecognizing] = useState(false);
+  const [recognizeError, setRecognizeError] = useState(null);
+
+  const handleRecognize = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    setRecognizing(true);
+    setRecognizeError(null);
+    try {
+      const uploadData = new FormData();
+      uploadData.append('image', file);
+
+      const response = await authFetch('/api/recognize', {
+        method: 'POST',
+        body: uploadData,
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        setFormData(prev => ({
+          ...prev,
+          name: data.name || prev.name,
+          name_de: data.name_de || prev.name_de,
+          brand: data.brand || prev.brand,
+        }));
+      } else if (response.status === 501) {
+        setRecognizeError('Bilderkennung nicht konfiguriert');
+      } else {
+        setRecognizeError('Erkennung fehlgeschlagen');
+      }
+    } catch {
+      setRecognizeError('Verbindung fehlgeschlagen');
+    } finally {
+      setRecognizing(false);
+    }
+  };
 
   const handleSubmit = (e) => {
     e.preventDefault();
@@ -76,6 +114,22 @@ function ProductEditForm({ barcode, initialProduct, onSave, onCancel }) {
         <h2>Produktdetails bearbeiten</h2>
         
         <form onSubmit={handleSubmit} className="product-form">
+          <div className="recognize-section">
+            <label className="recognize-btn">
+              {recognizing ? '⏳ Wird erkannt…' : '📸 Produkt fotografieren'}
+              <input
+                type="file"
+                accept="image/*"
+                capture="environment"
+                onChange={handleRecognize}
+                disabled={recognizing}
+                hidden
+              />
+            </label>
+            <span className="recognize-hint">Foto aufnehmen, um Produktdaten automatisch zu erkennen</span>
+            {recognizeError && <p className="recognize-error">{recognizeError}</p>}
+          </div>
+
           <ProductFormFields
             formData={formData}
             setFormData={setFormData}

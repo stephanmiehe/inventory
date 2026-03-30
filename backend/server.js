@@ -192,6 +192,81 @@ app.post('/api/upload', upload.single('image'), (req, res) => {
   res.json({ image_url: `/uploads/${req.file.filename}` });
 });
 
+// --- Image Recognition ---
+const AZURE_OPENAI_API_KEY = process.env.AZURE_OPENAI_API_KEY || '';
+const AZURE_OPENAI_ENDPOINT = process.env.AZURE_OPENAI_ENDPOINT || '';
+const AZURE_OPENAI_DEPLOYMENT = process.env.AZURE_OPENAI_DEPLOYMENT || 'gpt-4o';
+const AZURE_OPENAI_API_VERSION = process.env.AZURE_OPENAI_API_VERSION || '2024-08-01-preview';
+
+app.post('/api/recognize', upload.single('image'), async (req, res) => {
+  if (!AZURE_OPENAI_API_KEY || !AZURE_OPENAI_ENDPOINT) {
+    return res.status(501).json({ error: 'Bilderkennung nicht konfiguriert' });
+  }
+  if (!req.file) {
+    return res.status(400).json({ error: 'Kein Bild hochgeladen' });
+  }
+
+  try {
+    const { readFileSync, unlinkSync } = await import('fs');
+    const imageBuffer = readFileSync(req.file.path);
+    const base64Image = imageBuffer.toString('base64');
+    const mimeType = req.file.mimetype || 'image/jpeg';
+
+    const url = `${AZURE_OPENAI_ENDPOINT.replace(/\/$/, '')}/openai/deployments/${AZURE_OPENAI_DEPLOYMENT}/chat/completions?api-version=${AZURE_OPENAI_API_VERSION}`;
+
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'api-key': AZURE_OPENAI_API_KEY,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        messages: [
+          {
+            role: 'user',
+            content: [
+              {
+                type: 'text',
+                text: 'Identify this grocery/household product from the image. Return ONLY a JSON object with these fields: {"name": "product name in original language", "name_de": "German name or null", "brand": "brand name or empty string"}. No markdown, no explanation, just the JSON.'
+              },
+              {
+                type: 'image_url',
+                image_url: { url: `data:${mimeType};base64,${base64Image}` }
+              }
+            ]
+          }
+        ],
+        max_tokens: 200,
+      }),
+    });
+
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({}));
+      console.error('Azure OpenAI API error:', err);
+      return res.status(502).json({ error: 'Bilderkennung fehlgeschlagen' });
+    }
+
+    const data = await response.json();
+    const content = data.choices?.[0]?.message?.content?.trim();
+
+    // Parse JSON from response, stripping markdown fences if present
+    const jsonStr = content.replace(/^```json?\s*/, '').replace(/\s*```$/, '');
+    const result = JSON.parse(jsonStr);
+
+    // Clean up temp file
+    unlinkSync(req.file.path);
+
+    res.json({
+      name: sanitizeString(result.name) || '',
+      name_de: sanitizeString(result.name_de) || null,
+      brand: sanitizeString(result.brand) || '',
+    });
+  } catch (error) {
+    console.error('Recognition error:', error);
+    res.status(500).json({ error: 'Bilderkennung fehlgeschlagen' });
+  }
+});
+
 // --- Translation ---
 async function translateToGerman(text) {
   try {
