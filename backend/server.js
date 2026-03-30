@@ -7,6 +7,7 @@ import multer from 'multer';
 import path from 'path';
 import Database from 'better-sqlite3';
 import rateLimit from 'express-rate-limit';
+import { MongoClient } from 'mongodb';
 
 dotenv.config();
 
@@ -141,55 +142,76 @@ async function translateToGerman(text) {
   }
 }
 
-// --- Product Lookup ---
-const PRODUCT_APIS = [
-  'https://es.openfoodfacts.org/api/v2/product/',
-  'https://es.openpetfoodfacts.org/api/v2/product/',
-  'https://es.openproductsfacts.org/api/v2/product/',
-  'https://de.openfoodfacts.org/api/v2/product/',
-  'https://de.openpetfoodfacts.org/api/v2/product/',
-  'https://de.openproductsfacts.org/api/v2/product/',
-];
+// --- MongoDB Product Lookup ---
+const MONGO_URI = process.env.MONGO_URI || 'mongodb://localhost:27017';
+const MONGO_DB = process.env.MONGO_DB || 'off';
+const MONGO_COLLECTION = process.env.MONGO_COLLECTION || 'products';
 
-async function lookupProductFromApi(apiBase, barcode) {
+const mongoClient = new MongoClient(MONGO_URI);
+let mongoProducts;
+
+async function connectMongo() {
+  await mongoClient.connect();
+  mongoProducts = mongoClient.db(MONGO_DB).collection(MONGO_COLLECTION);
+  console.log('Connected to MongoDB');
+}
+
+connectMongo().catch(err => {
+  console.error('MongoDB connection failed:', err.message);
+  process.exit(1);
+});
+
+async function lookupProduct(barcode) {
   try {
-    const response = await fetch(`${apiBase}${encodeURIComponent(barcode)}.json`);
-    const data = await response.json();
-    
-    if (data.status === 1 && data.product) {
-      const product = data.product;
-      const name = sanitizeString(product.product_name) || '';
-      if (!name) return null;
+    const doc = await mongoProducts.findOne({ code: barcode });
+    if (!doc) return null;
 
-      let name_de = null;
-      if (product.product_name_de && product.product_name_de !== name) {
-        name_de = sanitizeString(product.product_name_de);
-      } else {
-        name_de = await translateToGerman(name);
-      }
+    const name = sanitizeString(doc.product_name) || '';
+    if (!name) return null;
 
-      const imageUrl = product.image_url || product.image_front_url || '';
-
-      return {
-        barcode,
-        name,
-        name_de: name_de || null,
-        brand: sanitizeString(product.brands) || '',
-        image_url: isValidImageUrl(imageUrl) ? sanitizeString(imageUrl, MAX_URL_LENGTH) : ''
-      };
+    let name_de = null;
+    if (doc.product_name_de && doc.product_name_de !== name) {
+      name_de = sanitizeString(doc.product_name_de);
+    } else {
+      name_de = await translateToGerman(name);
     }
-    return null;
-  } catch {
+
+    const imageUrl = getImageUrl(doc);
+
+    return {
+      barcode,
+      name,
+      name_de: name_de || null,
+      brand: sanitizeString(doc.brands) || '',
+      image_url: isValidImageUrl(imageUrl) ? sanitizeString(imageUrl, MAX_URL_LENGTH) : ''
+    };
+  } catch (err) {
+    console.error('MongoDB lookup error:', err.message);
     return null;
   }
 }
 
-async function lookupProduct(barcode) {
-  for (const api of PRODUCT_APIS) {
-    const result = await lookupProductFromApi(api, barcode);
-    if (result) return result;
+function getImageUrl(doc) {
+  const front = doc.images?.selected?.front;
+  if (!front) return '';
+
+  // Pick the first available language variant
+  const lang = Object.keys(front)[0];
+  if (!lang) return '';
+
+  const entry = front[lang];
+  if (!entry?.imgid || !entry?.rev) return '';
+
+  // Build the barcode path: 13-digit codes split as 000/010/120/9159
+  const code = doc.code || '';
+  let barcodePath;
+  if (code.length > 8) {
+    barcodePath = `${code.slice(0, 3)}/${code.slice(3, 6)}/${code.slice(6, 9)}/${code.slice(9)}`;
+  } else {
+    barcodePath = code;
   }
-  return null;
+
+  return `https://images.openfoodfacts.org/images/products/${barcodePath}/front_${lang}.${entry.rev}.400.jpg`;
 }
 
 // --- Prepared Statements ---
@@ -537,10 +559,12 @@ app.get('/api/shopping-list', (req, res) => {
 // Graceful shutdown
 process.on('SIGINT', () => {
   db.close();
+  mongoClient.close();
   process.exit(0);
 });
 process.on('SIGTERM', () => {
   db.close();
+  mongoClient.close();
   process.exit(0);
 });
 
