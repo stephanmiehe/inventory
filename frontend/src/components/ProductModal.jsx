@@ -132,6 +132,7 @@ function ProductEditForm({ barcode, initialProduct, onSave, onCancel }) {
           name: data.name || prev.name,
           name_de: data.name_de || prev.name_de,
           brand: data.brand || prev.brand,
+          image_url: data.image_url || prev.image_url,
         }));
       } else if (response.status === 501) {
         setRecognizeError('Bilderkennung nicht konfiguriert');

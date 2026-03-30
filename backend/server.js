@@ -207,7 +207,7 @@ app.post('/api/recognize', upload.single('image'), async (req, res) => {
   }
 
   try {
-    const { readFileSync, unlinkSync } = await import('fs');
+    const { readFileSync } = await import('fs');
     const imageBuffer = readFileSync(req.file.path);
     const base64Image = imageBuffer.toString('base64');
     const mimeType = req.file.mimetype || 'image/jpeg';
@@ -253,13 +253,11 @@ app.post('/api/recognize', upload.single('image'), async (req, res) => {
     const jsonStr = content.replace(/^```json?\s*/, '').replace(/\s*```$/, '');
     const result = JSON.parse(jsonStr);
 
-    // Clean up temp file
-    unlinkSync(req.file.path);
-
     res.json({
       name: sanitizeString(result.name) || '',
       name_de: sanitizeString(result.name_de) || null,
       brand: sanitizeString(result.brand) || '',
+      image_url: `/uploads/${req.file.filename}`,
     });
   } catch (error) {
     console.error('Recognition error:', error);
