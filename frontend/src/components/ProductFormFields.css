@@ -1,0 +1,106 @@
+.product-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
+}
+
+.pf-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.pf-field > label {
+  font-weight: 600;
+  color: var(--text-secondary);
+  font-size: 0.85rem;
+}
+
+.pf-input {
+  width: 100%;
+  padding: 10px;
+  font-size: 0.95rem;
+  border: 2px solid var(--border-color);
+  border-radius: 6px;
+  transition: border-color 0.2s;
+  box-sizing: border-box;
+  background: var(--input-bg);
+  color: var(--text-primary);
+}
+
+.pf-input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.pf-input:disabled {
+  background: var(--input-disabled-bg);
+  color: var(--text-hint);
+  cursor: not-allowed;
+}
+
+.pf-image-controls {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.pf-image-controls .pf-input {
+  flex: 1;
+  min-width: 150px;
+}
+
+.pf-upload-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 8px 14px;
+  background: #4a5bc7;
+  color: #fff !important;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.85rem;
+  font-weight: 600;
+  white-space: nowrap;
+  transition: all 0.2s;
+}
+
+.pf-upload-btn:hover {
+  background: #3a4ab5;
+  transform: translateY(-1px);
+  box-shadow: 0 2px 6px rgba(0,0,0,0.15);
+}
+
+.pf-upload-or {
+  color: #999;
+  font-size: 0.85rem;
+}
+
+.pf-upload-status {
+  color: #667eea;
+  font-size: 0.85rem;
+  margin-top: 4px;
+  font-style: italic;
+}
+
+.pf-image-preview {
+  margin-top: 8px;
+  padding: 10px;
+  background: var(--bg-secondary);
+  border-radius: 8px;
+  text-align: center;
+}
+
+.pf-image-preview img {
+  max-width: 150px;
+  max-height: 150px;
+  border-radius: 6px;
+  object-fit: contain;
+}
+
+.pf-hint {
+  font-size: 0.8rem;
+  color: #999;
+  font-style: italic;
+}

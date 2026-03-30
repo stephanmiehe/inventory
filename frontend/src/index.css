@@ -1,0 +1,80 @@
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+:root {
+  --bg-gradient: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  --bg-primary: #ffffff;
+  --bg-secondary: #f8f9fa;
+  --bg-card: #f8f9fa;
+  --text-primary: #333333;
+  --text-secondary: #666666;
+  --text-muted: #6c757d;
+  --text-hint: #999999;
+  --border-color: #e9ecef;
+  --border-hover: #667eea;
+  --accent: #667eea;
+  --accent-dark: #5568d3;
+  --accent-gradient: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  --success: #d4edda;
+  --success-text: #155724;
+  --success-border: #c3e6cb;
+  --error: #f8d7da;
+  --error-text: #721c24;
+  --error-border: #f5c6cb;
+  --shadow: rgba(0, 0, 0, 0.1);
+  --shadow-hover: rgba(0, 0, 0, 0.15);
+  --input-bg: #ffffff;
+  --input-disabled-bg: #f5f5f5;
+  --brand-color: #667eea;
+  --danger: #dc3545;
+  --stock-ok: #28a745;
+}
+
+[data-theme="dark"] {
+  --bg-gradient: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+  --bg-primary: #1e1e2e;
+  --bg-secondary: #2a2a3e;
+  --bg-card: #2a2a3e;
+  --text-primary: #e0e0e0;
+  --text-secondary: #b0b0b0;
+  --text-muted: #8888a0;
+  --text-hint: #6e6e85;
+  --border-color: #3a3a50;
+  --border-hover: #667eea;
+  --accent: #7c8ef7;
+  --accent-dark: #6b7de0;
+  --accent-gradient: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  --success: #1a3a2a;
+  --success-text: #6fcf97;
+  --success-border: #2a5a3a;
+  --error: #3a1a1a;
+  --error-text: #f77;
+  --error-border: #5a2a2a;
+  --shadow: rgba(0, 0, 0, 0.3);
+  --shadow-hover: rgba(0, 0, 0, 0.4);
+  --input-bg: #2a2a3e;
+  --input-disabled-bg: #222233;
+  --brand-color: #7c8ef7;
+  --danger: #e55;
+  --stock-ok: #6fcf97;
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
+    'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
+    sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  background: var(--bg-gradient);
+  min-height: 100vh;
+  color: var(--text-primary);
+}
+
+#root {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 20px;
+}

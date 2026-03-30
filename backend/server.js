@@ -1,0 +1,549 @@
+import express from 'express';
+import cors from 'cors';
+import fetch from 'node-fetch';
+import dotenv from 'dotenv';
+import { existsSync, mkdirSync } from 'fs';
+import multer from 'multer';
+import path from 'path';
+import Database from 'better-sqlite3';
+import rateLimit from 'express-rate-limit';
+
+dotenv.config();
+
+const app = express();
+const PORT = process.env.PORT || 3001;
+const MAX_NAME_LENGTH = 500;
+const MAX_URL_LENGTH = 2000;
+
+// --- Database Setup ---
+const db = new Database('grocery.db');
+db.pragma('journal_mode = WAL');
+
+db.exec(`
+  CREATE TABLE IF NOT EXISTS products (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    barcode TEXT UNIQUE NOT NULL,
+    name TEXT NOT NULL,
+    name_de TEXT,
+    brand TEXT DEFAULT '',
+    image_url TEXT DEFAULT '',
+    ideal_stock INTEGER DEFAULT 0,
+    last_updated TEXT DEFAULT (datetime('now'))
+  );
+
+  CREATE TABLE IF NOT EXISTS inventory (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    product_id INTEGER NOT NULL,
+    barcode TEXT NOT NULL,
+    scanned_in TEXT DEFAULT (datetime('now')),
+    scanned_out TEXT,
+    FOREIGN KEY (product_id) REFERENCES products(id)
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_inventory_barcode ON inventory(barcode);
+  CREATE INDEX IF NOT EXISTS idx_inventory_active ON inventory(barcode, scanned_out);
+`);
+
+// --- Middleware ---
+app.use(cors({
+  origin: process.env.ALLOWED_ORIGINS || 'http://localhost:3000',
+  methods: ['GET', 'POST', 'DELETE'],
+}));
+app.use(express.json({ limit: '1mb' }));
+
+// Rate limiting
+const apiLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 200,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Zu viele Anfragen, bitte später erneut versuchen' }
+});
+app.use('/api/', apiLimiter);
+
+// Serve uploaded images
+const UPLOADS_DIR = 'uploads';
+if (!existsSync(UPLOADS_DIR)) {
+  mkdirSync(UPLOADS_DIR);
+}
+app.use('/uploads', express.static(UPLOADS_DIR));
+
+// --- Validation Helpers ---
+function isValidBarcode(barcode) {
+  return typeof barcode === 'string' && /^[\d]{4,14}$/.test(barcode.trim());
+}
+
+function sanitizeString(str, maxLength = MAX_NAME_LENGTH) {
+  if (!str || typeof str !== 'string') return '';
+  return str.trim().substring(0, maxLength);
+}
+
+function isValidImageUrl(url) {
+  if (!url) return true; // optional field
+  if (url.startsWith('/uploads/')) return true; // local upload
+  try {
+    const parsed = new URL(url);
+    return ['http:', 'https:'].includes(parsed.protocol);
+  } catch {
+    return false;
+  }
+}
+
+// --- Multer Setup ---
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => cb(null, UPLOADS_DIR),
+  filename: (req, file, cb) => {
+    const ext = path.extname(file.originalname).toLowerCase();
+    const name = `${Date.now()}-${Math.random().toString(36).slice(2)}${ext}`;
+    cb(null, name);
+  }
+});
+
+const upload = multer({
+  storage,
+  limits: { fileSize: 5 * 1024 * 1024 },
+  fileFilter: (req, file, cb) => {
+    const allowed = ['.jpg', '.jpeg', '.png', '.gif', '.webp'];
+    const ext = path.extname(file.originalname).toLowerCase();
+    if (allowed.includes(ext)) {
+      cb(null, true);
+    } else {
+      cb(new Error('Nur Bilddateien erlaubt'));
+    }
+  }
+});
+
+app.post('/api/upload', upload.single('image'), (req, res) => {
+  if (!req.file) {
+    return res.status(400).json({ error: 'Keine Datei hochgeladen' });
+  }
+  res.json({ image_url: `/uploads/${req.file.filename}` });
+});
+
+// --- Translation ---
+async function translateToGerman(text) {
+  try {
+    const url = `https://api.mymemory.translated.net/get?q=${encodeURIComponent(text)}&langpair=autodetect|de`;
+    const response = await fetch(url);
+    const data = await response.json();
+
+    if (data.responseStatus === 200 && data.responseData?.translatedText) {
+      const translated = data.responseData.translatedText;
+      if (translated.toLowerCase().trim() === text.toLowerCase().trim()) {
+        return null;
+      }
+      return translated;
+    }
+    return null;
+  } catch (error) {
+    console.error('Translation failed:', error);
+    return null;
+  }
+}
+
+// --- Product Lookup ---
+const PRODUCT_APIS = [
+  'https://es.openfoodfacts.org/api/v2/product/',
+  'https://es.openpetfoodfacts.org/api/v2/product/',
+  'https://es.openproductsfacts.org/api/v2/product/',
+  'https://de.openfoodfacts.org/api/v2/product/',
+  'https://de.openpetfoodfacts.org/api/v2/product/',
+  'https://de.openproductsfacts.org/api/v2/product/',
+];
+
+async function lookupProductFromApi(apiBase, barcode) {
+  try {
+    const response = await fetch(`${apiBase}${encodeURIComponent(barcode)}.json`);
+    const data = await response.json();
+    
+    if (data.status === 1 && data.product) {
+      const product = data.product;
+      const name = sanitizeString(product.product_name) || '';
+      if (!name) return null;
+
+      let name_de = null;
+      if (product.product_name_de && product.product_name_de !== name) {
+        name_de = sanitizeString(product.product_name_de);
+      } else {
+        name_de = await translateToGerman(name);
+      }
+
+      const imageUrl = product.image_url || product.image_front_url || '';
+
+      return {
+        barcode,
+        name,
+        name_de: name_de || null,
+        brand: sanitizeString(product.brands) || '',
+        image_url: isValidImageUrl(imageUrl) ? sanitizeString(imageUrl, MAX_URL_LENGTH) : ''
+      };
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+async function lookupProduct(barcode) {
+  for (const api of PRODUCT_APIS) {
+    const result = await lookupProductFromApi(api, barcode);
+    if (result) return result;
+  }
+  return null;
+}
+
+// --- Prepared Statements ---
+const stmts = {
+  getProduct: db.prepare('SELECT * FROM products WHERE barcode = ?'),
+  insertProduct: db.prepare(`
+    INSERT INTO products (barcode, name, name_de, brand, image_url, ideal_stock)
+    VALUES (?, ?, ?, ?, ?, ?)
+  `),
+  updateProduct: db.prepare(`
+    UPDATE products SET name = ?, name_de = ?, brand = ?, image_url = ?, ideal_stock = ?, last_updated = datetime('now')
+    WHERE barcode = ?
+  `),
+  insertInventory: db.prepare(`
+    INSERT INTO inventory (product_id, barcode) VALUES (?, ?)
+  `),
+  getActiveItems: db.prepare(`
+    SELECT id FROM inventory WHERE barcode = ? AND scanned_out IS NULL ORDER BY scanned_in ASC
+  `),
+  scanOut: db.prepare(`
+    UPDATE inventory SET scanned_out = datetime('now') WHERE id = ?
+  `),
+  getInventory: db.prepare(`
+    SELECT 
+      p.id, p.barcode, p.name, p.name_de, p.brand, p.image_url, p.ideal_stock,
+      COUNT(CASE WHEN i.scanned_out IS NULL THEN 1 END) as quantity,
+      MIN(i.scanned_in) as first_added,
+      MAX(i.scanned_in) as last_added
+    FROM products p
+    INNER JOIN inventory i ON p.barcode = i.barcode
+    GROUP BY p.barcode
+    ORDER BY last_added DESC
+  `),
+  scanOutAll: db.prepare(`
+    UPDATE inventory SET scanned_out = datetime('now')
+    WHERE barcode = ? AND scanned_out IS NULL
+  `),
+  deleteProduct: db.prepare(`
+    DELETE FROM products WHERE barcode = ?
+  `),
+  deleteInventory: db.prepare(`
+    DELETE FROM inventory WHERE barcode = ?
+  `),
+  countActive: db.prepare(`
+    SELECT COUNT(*) as count FROM inventory WHERE barcode = ? AND scanned_out IS NULL
+  `),
+  setIdealStock: db.prepare(`
+    UPDATE products SET ideal_stock = ?, last_updated = datetime('now') WHERE barcode = ?
+  `),
+  getShoppingList: db.prepare(`
+    SELECT 
+      p.id, p.barcode, p.name, p.name_de, p.brand, p.image_url, p.ideal_stock,
+      COUNT(CASE WHEN i.scanned_out IS NULL THEN 1 END) as current_stock
+    FROM products p
+    LEFT JOIN inventory i ON p.barcode = i.barcode
+    WHERE p.ideal_stock > 0
+    GROUP BY p.barcode
+    HAVING current_stock < p.ideal_stock
+    ORDER BY COALESCE(p.name_de, p.name) COLLATE NOCASE
+  `),
+};
+
+// --- API Routes ---
+
+// Product lookup
+app.post('/api/products/lookup', async (req, res) => {
+  const barcode = req.body.barcode?.trim();
+  
+  if (!barcode) {
+    return res.status(400).json({ error: 'Barcode ist erforderlich' });
+  }
+  if (!isValidBarcode(barcode)) {
+    return res.status(400).json({ error: 'Ungültiges Barcode-Format' });
+  }
+
+  try {
+    let product = stmts.getProduct.get(barcode);
+    
+    if (!product) {
+      const productData = await lookupProduct(barcode);
+      if (!productData) {
+        return res.status(404).json({ error: 'Produkt nicht gefunden' });
+      }
+      
+      const result = stmts.insertProduct.run(
+        productData.barcode, productData.name, productData.name_de,
+        productData.brand, productData.image_url, 0
+      );
+      product = stmts.getProduct.get(barcode);
+    } else if (!product.name_de && product.name) {
+      const translated = await translateToGerman(product.name);
+      if (translated) {
+        stmts.updateProduct.run(product.name, translated, product.brand, product.image_url, product.ideal_stock, barcode);
+        product = stmts.getProduct.get(barcode);
+      }
+    }
+    
+    res.json(product);
+  } catch (error) {
+    console.error('Error in product lookup:', error);
+    res.status(500).json({ error: 'Interner Serverfehler' });
+  }
+});
+
+// Update product
+app.post('/api/products/update', async (req, res) => {
+  const barcode = req.body.barcode?.trim();
+  const name = sanitizeString(req.body.name);
+  const brand = sanitizeString(req.body.brand);
+  const image_url = sanitizeString(req.body.image_url, MAX_URL_LENGTH);
+  
+  if (!barcode || !name) {
+    return res.status(400).json({ error: 'Barcode und Name sind erforderlich' });
+  }
+  if (!isValidImageUrl(image_url)) {
+    return res.status(400).json({ error: 'Ungültige Bild-URL' });
+  }
+
+  try {
+    let product = stmts.getProduct.get(barcode);
+    let name_de = sanitizeString(req.body.name_de) || null;
+    
+    if (!name_de) {
+      name_de = await translateToGerman(name);
+    }
+
+    const idealStock = req.body.ideal_stock !== undefined
+      ? Math.max(0, Math.floor(Number(req.body.ideal_stock) || 0))
+      : (product?.ideal_stock || 0);
+
+    if (!product) {
+      stmts.insertProduct.run(barcode, name, name_de, brand, image_url, idealStock);
+    } else {
+      stmts.updateProduct.run(name, name_de, brand, image_url, idealStock, barcode);
+    }
+    
+    product = stmts.getProduct.get(barcode);
+    res.json(product);
+  } catch (error) {
+    console.error('Error updating product:', error);
+    res.status(500).json({ error: 'Interner Serverfehler' });
+  }
+});
+
+// Scan in
+app.post('/api/inventory/scan-in', async (req, res) => {
+  const barcode = req.body.barcode?.trim();
+  
+  if (!barcode) {
+    return res.status(400).json({ error: 'Barcode ist erforderlich' });
+  }
+  if (!isValidBarcode(barcode)) {
+    return res.status(400).json({ error: 'Ungültiges Barcode-Format' });
+  }
+
+  const count = Math.max(1, Math.min(100, Math.floor(Number(req.body.quantity) || 1)));
+
+  try {
+    let product = stmts.getProduct.get(barcode);
+    
+    if (!product) {
+      const productData = await lookupProduct(barcode);
+      if (!productData) {
+        return res.status(404).json({ error: 'Produkt nicht gefunden' });
+      }
+      stmts.insertProduct.run(
+        productData.barcode, productData.name, productData.name_de,
+        productData.brand, productData.image_url, 0
+      );
+      product = stmts.getProduct.get(barcode);
+    }
+    
+    const insertMany = db.transaction((count) => {
+      for (let i = 0; i < count; i++) {
+        stmts.insertInventory.run(product.id, barcode);
+      }
+    });
+    insertMany(count);
+    
+    res.json({ message: `${count} Artikel eingebucht`, product, quantity: count });
+  } catch (error) {
+    console.error('Error scanning in item:', error);
+    res.status(500).json({ error: 'Interner Serverfehler' });
+  }
+});
+
+// Scan out
+app.post('/api/inventory/scan-out', async (req, res) => {
+  const barcode = req.body.barcode?.trim();
+  
+  if (!barcode) {
+    return res.status(400).json({ error: 'Barcode ist erforderlich' });
+  }
+  if (!isValidBarcode(barcode)) {
+    return res.status(400).json({ error: 'Ungültiges Barcode-Format' });
+  }
+
+  const count = Math.max(1, Math.min(100, Math.floor(Number(req.body.quantity) || 1)));
+
+  try {
+    const product = stmts.getProduct.get(barcode);
+    if (!product) {
+      return res.status(404).json({ error: 'Produkt nicht in der Datenbank' });
+    }
+    
+    const activeItems = stmts.getActiveItems.all(barcode);
+    if (activeItems.length === 0) {
+      return res.status(404).json({ error: 'Kein Bestand dieses Produkts vorhanden' });
+    }
+
+    const toRemove = Math.min(count, activeItems.length);
+    
+    const removeMany = db.transaction((items) => {
+      for (let i = 0; i < toRemove; i++) {
+        stmts.scanOut.run(items[i].id);
+      }
+    });
+    removeMany(activeItems);
+    
+    res.json({ message: `${toRemove} Artikel ausgebucht`, product, quantity: toRemove });
+  } catch (error) {
+    console.error('Error scanning out item:', error);
+    res.status(500).json({ error: 'Interner Serverfehler' });
+  }
+});
+
+// Get inventory
+app.get('/api/inventory', (req, res) => {
+  try {
+    const inventory = stmts.getInventory.all();
+    res.json(inventory);
+  } catch (error) {
+    console.error('Error getting inventory:', error);
+    res.status(500).json({ error: 'Interner Serverfehler' });
+  }
+});
+
+// Delete product from inventory
+app.delete('/api/inventory/:barcode', (req, res) => {
+  const barcode = req.params.barcode?.trim();
+  if (!barcode) {
+    return res.status(400).json({ error: 'Barcode ist erforderlich' });
+  }
+
+  try {
+    const product = stmts.getProduct.get(barcode);
+    if (!product) {
+      return res.status(404).json({ error: 'Produkt nicht gefunden' });
+    }
+
+    const deleteAll = db.transaction(() => {
+      stmts.scanOutAll.run(barcode);
+      stmts.deleteInventory.run(barcode);
+      stmts.deleteProduct.run(barcode);
+    });
+    deleteAll();
+
+    res.json({ message: `${product.name} entfernt` });
+  } catch (error) {
+    console.error('Error deleting inventory item:', error);
+    res.status(500).json({ error: 'Interner Serverfehler' });
+  }
+});
+
+// Set quantity
+app.post('/api/inventory/set-quantity', (req, res) => {
+  const barcode = req.body.barcode?.trim();
+  const quantity = req.body.quantity;
+
+  if (!barcode || quantity == null) {
+    return res.status(400).json({ error: 'Barcode und Menge sind erforderlich' });
+  }
+
+  const newQty = Math.max(0, Math.min(1000, Math.floor(Number(quantity))));
+
+  try {
+    const product = stmts.getProduct.get(barcode);
+    if (!product) {
+      return res.status(404).json({ error: 'Produkt nicht gefunden' });
+    }
+
+    const activeItems = stmts.getActiveItems.all(barcode);
+    const currentQty = activeItems.length;
+
+    const adjustQty = db.transaction(() => {
+      if (newQty > currentQty) {
+        for (let i = 0; i < newQty - currentQty; i++) {
+          stmts.insertInventory.run(product.id, barcode);
+        }
+      } else if (newQty < currentQty) {
+        const toRemove = currentQty - newQty;
+        for (let i = 0; i < toRemove; i++) {
+          stmts.scanOut.run(activeItems[i].id);
+        }
+      }
+    });
+    adjustQty();
+
+    res.json({ message: `Menge auf ${newQty} gesetzt`, product, quantity: newQty });
+  } catch (error) {
+    console.error('Error setting quantity:', error);
+    res.status(500).json({ error: 'Interner Serverfehler' });
+  }
+});
+
+// Set ideal stock
+app.post('/api/products/set-ideal-stock', (req, res) => {
+  const barcode = req.body.barcode?.trim();
+  const ideal_stock = req.body.ideal_stock;
+
+  if (!barcode || ideal_stock == null) {
+    return res.status(400).json({ error: 'Barcode und Soll-Bestand sind erforderlich' });
+  }
+
+  try {
+    const product = stmts.getProduct.get(barcode);
+    if (!product) {
+      return res.status(404).json({ error: 'Produkt nicht gefunden' });
+    }
+
+    const newIdeal = Math.max(0, Math.floor(Number(ideal_stock)));
+    stmts.setIdealStock.run(newIdeal, barcode);
+
+    res.json({ message: 'Soll-Bestand aktualisiert', product: stmts.getProduct.get(barcode) });
+  } catch (error) {
+    console.error('Error setting ideal stock:', error);
+    res.status(500).json({ error: 'Interner Serverfehler' });
+  }
+});
+
+// Shopping list
+app.get('/api/shopping-list', (req, res) => {
+  try {
+    const items = stmts.getShoppingList.all().map(item => ({
+      ...item,
+      needed: item.ideal_stock - item.current_stock
+    }));
+    res.json(items);
+  } catch (error) {
+    console.error('Error getting shopping list:', error);
+    res.status(500).json({ error: 'Interner Serverfehler' });
+  }
+});
+
+// Graceful shutdown
+process.on('SIGINT', () => {
+  db.close();
+  process.exit(0);
+});
+process.on('SIGTERM', () => {
+  db.close();
+  process.exit(0);
+});
+
+app.listen(PORT, () => {
+  console.log(`Server running on http://localhost:${PORT}`);
+});
