@@ -7,12 +7,6 @@ const BARCODE_FORMATS = [
   Html5QrcodeSupportedFormats.EAN_8,
   Html5QrcodeSupportedFormats.UPC_A,
   Html5QrcodeSupportedFormats.UPC_E,
-  Html5QrcodeSupportedFormats.CODE_128,
-  Html5QrcodeSupportedFormats.CODE_39,
-  Html5QrcodeSupportedFormats.CODE_93,
-  Html5QrcodeSupportedFormats.CODABAR,
-  Html5QrcodeSupportedFormats.ITF,
-  Html5QrcodeSupportedFormats.QR_CODE,
 ];
 
 function BarcodeScanner({ onScan, disabled }) {
@@ -95,8 +89,13 @@ function BarcodeScanner({ onScan, disabled }) {
       await html5QrCodeRef.current.start(
         selectedCamera,
         {
-          fps: 10,
-          qrbox: { width: 250, height: 150 },
+          fps: 30,
+          qrbox: (viewfinderWidth, viewfinderHeight) => ({
+            width: Math.floor(viewfinderWidth * 0.8),
+            height: Math.floor(viewfinderHeight * 0.4),
+          }),
+          aspectRatio: 1.0,
+          disableFlip: true,
         },
         (decodedText) => {
           // Successfully scanned
