@@ -4,12 +4,16 @@ After=network.target
 
 [Service]
 Type=simple
+User=inventory
+Group=inventory
 WorkingDirectory=/opt/inventory/backend
 ExecStart=/usr/bin/node server.js
 Restart=on-failure
 RestartSec=5
+EnvironmentFile=/opt/inventory/backend/.env
 Environment=NODE_ENV=production
-Environment=PORT=3001
+KillSignal=SIGTERM
+TimeoutStopSec=10
 
 [Install]
 WantedBy=multi-user.target

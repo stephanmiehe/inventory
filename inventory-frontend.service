@@ -1,15 +1,15 @@
 [Unit]
-Description=Inventory Tracker Frontend (Vite Preview)
-After=network.target inventory-backend.service
+Description=Inventory Tracker Frontend Build
+After=network.target
 
 [Service]
-Type=simple
+Type=oneshot
+User=inventory
+Group=inventory
 WorkingDirectory=/opt/inventory/frontend
-ExecStartPre=/usr/bin/npx vite build
-ExecStart=/usr/bin/npx vite preview --port 3000 --host
-Restart=on-failure
-RestartSec=5
+ExecStart=/usr/bin/npx vite build
 Environment=NODE_ENV=production
+RemainAfterExit=true
 
 [Install]
 WantedBy=multi-user.target
