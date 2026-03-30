@@ -164,10 +164,18 @@ connectMongo().catch(err => {
 async function lookupProduct(barcode) {
   try {
     const doc = await mongoProducts.findOne({ code: barcode });
-    if (!doc) return null;
+    if (!doc) {
+      console.log(`MongoDB: no document found for code "${barcode}"`);
+      return null;
+    }
+
+    console.log(`MongoDB: found document for code "${barcode}", product_name="${doc.product_name}", brands="${doc.brands}"`);
 
     const name = sanitizeString(doc.product_name) || '';
-    if (!name) return null;
+    if (!name) {
+      console.log(`MongoDB: document for "${barcode}" has no product_name, skipping`);
+      return null;
+    }
 
     let name_de = null;
     if (doc.product_name_de && doc.product_name_de !== name) {
