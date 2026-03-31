@@ -9,6 +9,7 @@ function Inventory({ inventory, onRefresh, setInventory }) {
   const [confirmDelete, setConfirmDelete] = useState(null);
   const [editingProduct, setEditingProduct] = useState(null);
   const [editForm, setEditForm] = useState({ name: '', name_de: '', brand: '', image_url: '' });
+  const [zoomImage, setZoomImage] = useState(null);
 
   // Debounce search input
   useEffect(() => {
@@ -161,7 +162,7 @@ function Inventory({ inventory, onRefresh, setInventory }) {
             ) : (
               <>
             {item.image_url && (
-              <div className="item-image">
+              <div className="item-image" onClick={() => setZoomImage({ url: item.image_url, name: item.name_de || item.name })}>
                 <img src={item.image_url} alt={item.name} />
               </div>
             )}
@@ -224,6 +225,16 @@ function Inventory({ inventory, onRefresh, setInventory }) {
           <div className="summary-label">{query ? 'Gefundene Artikel' : 'Artikel gesamt'}</div>
         </div>
       </div>
+
+      {zoomImage && (
+        <div className="image-zoom-overlay" onClick={() => setZoomImage(null)}>
+          <div className="image-zoom-content" onClick={(e) => e.stopPropagation()}>
+            <img src={zoomImage.url} alt={zoomImage.name} />
+            <p className="image-zoom-name">{zoomImage.name}</p>
+            <button className="image-zoom-close" onClick={() => setZoomImage(null)}>✕</button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

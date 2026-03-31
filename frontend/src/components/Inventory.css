@@ -576,3 +576,59 @@
     width: 100%;
   }
 }
+
+.item-image {
+  cursor: pointer;
+}
+
+.image-zoom-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.85);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  padding: 20px;
+}
+
+.image-zoom-content {
+  position: relative;
+  max-width: 90vw;
+  max-height: 90vh;
+  text-align: center;
+}
+
+.image-zoom-content img {
+  max-width: 100%;
+  max-height: 80vh;
+  border-radius: 12px;
+  object-fit: contain;
+}
+
+.image-zoom-name {
+  color: white;
+  font-size: 1.1rem;
+  margin-top: 12px;
+}
+
+.image-zoom-close {
+  position: absolute;
+  top: -12px;
+  right: -12px;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  border: none;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  font-size: 1.2rem;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+}
