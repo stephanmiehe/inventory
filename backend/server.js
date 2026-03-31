@@ -288,16 +288,16 @@ async function translateToGerman(text) {
 
 // --- MongoDB Product Lookup ---
 const MONGO_URI = process.env.MONGO_URI || 'mongodb://localhost:27017';
-const MONGO_DB = process.env.MONGO_DB || 'off';
+const MONGO_DBS = (process.env.MONGO_DBS || 'off,opf,opff').split(',').map(s => s.trim());
 const MONGO_COLLECTION = process.env.MONGO_COLLECTION || 'products';
 
 const mongoClient = new MongoClient(MONGO_URI);
-let mongoProducts;
+let mongoCollections = [];
 
 async function connectMongo() {
   await mongoClient.connect();
-  mongoProducts = mongoClient.db(MONGO_DB).collection(MONGO_COLLECTION);
-  console.log('Connected to MongoDB');
+  mongoCollections = MONGO_DBS.map(dbName => mongoClient.db(dbName).collection(MONGO_COLLECTION));
+  console.log(`Connected to MongoDB (databases: ${MONGO_DBS.join(', ')})`);
 }
 
 connectMongo().catch(err => {
@@ -307,7 +307,11 @@ connectMongo().catch(err => {
 
 async function lookupProduct(barcode) {
   try {
-    const doc = await mongoProducts.findOne({ code: barcode });
+    let doc = null;
+    for (const collection of mongoCollections) {
+      doc = await collection.findOne({ code: barcode });
+      if (doc) break;
+    }
     if (!doc) {
       console.log(`MongoDB: no document found for code "${barcode}"`);
       return null;
