@@ -9,6 +9,8 @@ cd "$APP_DIR"
 echo "==> Pulling latest changes..."
 sudo -u "$APP_USER" git pull --ff-only
 
+sudo chown -R "$APP_USER:$APP_USER" "$APP_DIR"
+
 echo "==> Installing dependencies..."
 sudo -u "$APP_USER" npm ci
 
