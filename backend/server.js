@@ -1034,7 +1034,7 @@ app.get('/api/products/similar', (req, res) => {
 
         // Score: how many of our name stems appear in the candidate's stems
         const matchCount = nameStems.filter(stem =>
-          pStems.some(ps => ps === stem || ps.startsWith(stem) || stem.startsWith(ps))
+          pStems.some(ps => ps === stem || (Math.abs(ps.length - stem.length) <= 2 && (ps.startsWith(stem) || stem.startsWith(ps))))
         ).length;
         return { ...p, matchScore: matchCount / nameStems.length };
       })
