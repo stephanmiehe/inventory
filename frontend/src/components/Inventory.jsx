@@ -26,6 +26,59 @@ function LazyItem({ children, height = 200 }) {
   return <div ref={ref}>{children}</div>;
 }
 
+// Normalize umlauts and special chars for search comparison
+function normalizeText(text) {
+  return (text || '').toLowerCase()
+    .replace(/ä/g, 'a').replace(/ö/g, 'o').replace(/ü/g, 'u').replace(/ß/g, 'ss');
+}
+
+// Highlight matching words in text
+function Highlight({ text, words }) {
+  if (!text || !words || words.length === 0) return text;
+  // Build regex matching any of the search words (on the original text, case-insensitive)
+  const escaped = words.map(w => w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
+  const regex = new RegExp(`(${escaped.join('|')})`, 'gi');
+  const parts = text.split(regex);
+  if (parts.length === 1) {
+    // No regex match — try umlaut-normalized match for highlighting
+    const normText = normalizeText(text);
+    const normWords = words.map(normalizeText);
+    // Find positions of matches in normalized text, highlight corresponding original chars
+    let highlights = [];
+    for (const nw of normWords) {
+      let idx = 0;
+      while ((idx = normText.indexOf(nw, idx)) !== -1) {
+        highlights.push([idx, idx + nw.length]);
+        idx += nw.length;
+      }
+    }
+    if (highlights.length === 0) return text;
+    // Merge overlapping ranges and build parts
+    highlights.sort((a, b) => a[0] - b[0]);
+    const merged = [highlights[0]];
+    for (let i = 1; i < highlights.length; i++) {
+      const last = merged[merged.length - 1];
+      if (highlights[i][0] <= last[1]) {
+        last[1] = Math.max(last[1], highlights[i][1]);
+      } else {
+        merged.push(highlights[i]);
+      }
+    }
+    const result = [];
+    let pos = 0;
+    for (const [start, end] of merged) {
+      if (pos < start) result.push(text.slice(pos, start));
+      result.push(<mark key={start} className="search-highlight">{text.slice(start, end)}</mark>);
+      pos = end;
+    }
+    if (pos < text.length) result.push(text.slice(pos));
+    return result;
+  }
+  return parts.map((part, i) =>
+    regex.test(part) ? <mark key={i} className="search-highlight">{part}</mark> : part
+  );
+}
+
 function Inventory({ inventory, onRefresh, setInventory }) {
   const [search, setSearch] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
@@ -39,11 +92,31 @@ function Inventory({ inventory, onRefresh, setInventory }) {
   const [newGroupName, setNewGroupName] = useState('');
   const [editingGroup, setEditingGroup] = useState(null);
   const [editGroupForm, setEditGroupForm] = useState({ name: '', name_de: '' });
+  const searchInputRef = useRef(null);
+  const gridRef = useRef(null);
 
   useEffect(() => {
     const timer = setTimeout(() => setDebouncedSearch(search), 200);
     return () => clearTimeout(timer);
   }, [search]);
+
+  // Auto-focus search when component mounts
+  useEffect(() => {
+    searchInputRef.current?.focus();
+  }, []);
+
+  // Dismiss keyboard on scroll (mobile)
+  useEffect(() => {
+    const grid = gridRef.current;
+    if (!grid) return;
+    const onScroll = () => {
+      if (document.activeElement === searchInputRef.current) {
+        searchInputRef.current.blur();
+      }
+    };
+    window.addEventListener('scroll', onScroll, { passive: true });
+    return () => window.removeEventListener('scroll', onScroll);
+  }, []);
 
   const loadGroups = async () => {
     try {
@@ -251,15 +324,20 @@ function Inventory({ inventory, onRefresh, setInventory }) {
   };
 
   const query = debouncedSearch.toLowerCase().trim();
-  const filtered = query
-    ? inventory.filter(item =>
-        item.name.toLowerCase().includes(query) ||
-        (item.name_de && item.name_de.toLowerCase().includes(query)) ||
-        (item.brand && item.brand.toLowerCase().includes(query)) ||
-        (item.group_name && item.group_name.toLowerCase().includes(query)) ||
-        (item.group_name_de && item.group_name_de.toLowerCase().includes(query)) ||
-        item.barcode.includes(query)
-      )
+  const searchWords = query.split(/\s+/).filter(Boolean);
+  const normalizedWords = searchWords.map(normalizeText);
+
+  const filtered = normalizedWords.length > 0
+    ? inventory.filter(item => {
+        const fields = [
+          item.name, item.name_de, item.brand,
+          item.group_name, item.group_name_de, item.barcode
+        ].map(normalizeText);
+        // Every search word must match at least one field
+        return normalizedWords.every(nw =>
+          fields.some(f => f.includes(nw))
+        );
+      })
     : inventory;
 
   // Build grouped + ungrouped display items
@@ -333,9 +411,9 @@ function Inventory({ inventory, onRefresh, setInventory }) {
               </div>
             )}
             <div className="item-details">
-              <h3>{item.name_de || item.name}</h3>
-              {item.name_de && <p className="name-original">{item.name}</p>}
-              {item.brand && <p className="brand">{item.brand}</p>}
+              <h3><Highlight text={item.name_de || item.name} words={searchWords} /></h3>
+              {item.name_de && <p className="name-original"><Highlight text={item.name} words={searchWords} /></p>}
+              {item.brand && <p className="brand"><Highlight text={item.brand} words={searchWords} /></p>}
               <div className="item-meta">
                 <div className="qty-row">
                   <span className="qty-label">Ist</span>
@@ -390,6 +468,7 @@ function Inventory({ inventory, onRefresh, setInventory }) {
       <div className="search-bar">
         <span className="search-icon">🔍</span>
         <input
+          ref={searchInputRef}
           type="text"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
@@ -407,7 +486,7 @@ function Inventory({ inventory, onRefresh, setInventory }) {
         </div>
       )}
 
-      <div className="inventory-grid">
+      <div className="inventory-grid" ref={gridRef}>
         {displayItems.map((display) => {
           if (display.type === 'group') {
             const g = display;
@@ -445,7 +524,7 @@ function Inventory({ inventory, onRefresh, setInventory }) {
                           </div>
                         )}
                         <div className="group-info">
-                          <h3>{g.group_name_de || g.group_name} <span className="group-badge">{g.members.length} Varianten</span></h3>
+                          <h3><Highlight text={g.group_name_de || g.group_name} words={searchWords} /> <span className="group-badge">{g.members.length} Varianten</span></h3>
                         </div>
                         <button className="group-edit-btn" onClick={(e) => { e.stopPropagation(); startEditingGroup(g); }} title="Gruppe bearbeiten">✏️</button>
                         <span className={`group-toggle ${expanded ? 'expanded' : ''}`}>▶</span>
