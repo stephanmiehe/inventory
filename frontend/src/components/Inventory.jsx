@@ -39,7 +39,6 @@ function Inventory({ inventory, onRefresh, setInventory }) {
   }
 
   const handleSetQuantity = async (barcode, quantity) => {
-    // Update parent state directly — no re-fetch, no scroll jump
     const newQty = Math.max(0, quantity);
     setInventory(prev =>
       prev.map(item =>
@@ -55,6 +54,26 @@ function Inventory({ inventory, onRefresh, setInventory }) {
       });
     } catch (error) {
       console.error('Error setting quantity:', error);
+      onRefresh();
+    }
+  };
+
+  const handleSetIdealStock = async (barcode, idealStock) => {
+    const newIdeal = Math.max(0, idealStock);
+    setInventory(prev =>
+      prev.map(item =>
+        item.barcode === barcode ? { ...item, ideal_stock: newIdeal } : item
+      )
+    );
+
+    try {
+      await authFetch('/api/products/set-ideal-stock', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ barcode, ideal_stock: newIdeal }),
+      });
+    } catch (error) {
+      console.error('Error setting ideal stock:', error);
       onRefresh();
     }
   };
@@ -172,23 +191,38 @@ function Inventory({ inventory, onRefresh, setInventory }) {
               {item.brand && <p className="brand">{item.brand}</p>}
               <p className="barcode">Barcode: {item.barcode}</p>
               <div className="item-meta">
-                <div className="qty-inline">
-                  <button
-                    className="qty-btn-sm"
-                    onClick={() => handleSetQuantity(item.barcode, item.quantity - 1)}
-                    disabled={item.quantity <= 0}
-                  >−</button>
-                  <span className="qty-display">{item.quantity}</span>
-                  <button
-                    className="qty-btn-sm"
-                    onClick={() => handleSetQuantity(item.barcode, item.quantity + 1)}
-                  >+</button>
+                <div className="qty-row">
+                  <span className="qty-label">Ist</span>
+                  <div className="qty-inline">
+                    <button
+                      className="qty-btn-sm"
+                      onClick={() => handleSetQuantity(item.barcode, item.quantity - 1)}
+                      disabled={item.quantity <= 0}
+                    >−</button>
+                    <span className="qty-display">{item.quantity}</span>
+                    <button
+                      className="qty-btn-sm"
+                      onClick={() => handleSetQuantity(item.barcode, item.quantity + 1)}
+                    >+</button>
+                  </div>
                 </div>
-                {item.ideal_stock > 0 && (
-                  <span className={`stock-indicator ${item.quantity < item.ideal_stock ? 'low' : 'ok'}`}>
-                    {item.quantity < item.ideal_stock ? '⚠️' : '✓'} Soll: {item.ideal_stock}
-                  </span>
-                )}
+                <div className="qty-row">
+                  <span className="qty-label">Soll</span>
+                  <div className="qty-inline soll">
+                    <button
+                      className="qty-btn-sm"
+                      onClick={() => handleSetIdealStock(item.barcode, (item.ideal_stock || 0) - 1)}
+                      disabled={(item.ideal_stock || 0) <= 0}
+                    >−</button>
+                    <span className={`qty-display ${item.ideal_stock > 0 && item.quantity < item.ideal_stock ? 'low' : ''}`}>
+                      {item.ideal_stock || 0}
+                    </span>
+                    <button
+                      className="qty-btn-sm"
+                      onClick={() => handleSetIdealStock(item.barcode, (item.ideal_stock || 0) + 1)}
+                    >+</button>
+                  </div>
+                </div>
               </div>
               <div className="item-actions">
                 <button className="edit-btn" onClick={() => startEditingProduct(item)}>

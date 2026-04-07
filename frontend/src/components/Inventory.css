@@ -162,10 +162,26 @@
 
 .item-meta {
   display: flex;
-  align-items: center;
+  flex-direction: column;
+  gap: 8px;
   margin-top: 12px;
   padding-top: 12px;
   border-top: 1px solid var(--border-color);
+}
+
+.qty-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.qty-label {
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: var(--text-muted);
+  min-width: 30px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
 }
 
 .quantity {
@@ -212,6 +228,19 @@
 
 .stock-indicator.ok {
   color: var(--stock-ok);
+}
+
+.qty-display.low {
+  color: var(--danger);
+}
+
+.qty-inline.soll .qty-btn-sm {
+  border-color: var(--border-color);
+}
+
+.qty-inline.soll .qty-display {
+  background: transparent;
+  border-color: var(--border-color);
 }
 
 .date {
