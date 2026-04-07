@@ -100,15 +100,8 @@ function Inventory({ inventory, onRefresh, setInventory }) {
     return () => clearTimeout(timer);
   }, [search]);
 
-  // Auto-focus search when component mounts
-  useEffect(() => {
-    searchInputRef.current?.focus();
-  }, []);
-
   // Dismiss keyboard on scroll (mobile)
   useEffect(() => {
-    const grid = gridRef.current;
-    if (!grid) return;
     const onScroll = () => {
       if (document.activeElement === searchInputRef.current) {
         searchInputRef.current.blur();
@@ -116,6 +109,13 @@ function Inventory({ inventory, onRefresh, setInventory }) {
     };
     window.addEventListener('scroll', onScroll, { passive: true });
     return () => window.removeEventListener('scroll', onScroll);
+  }, []);
+
+  // Auto-focus search only on non-touch devices to avoid opening keyboard on phones
+  useEffect(() => {
+    if (!window.matchMedia('(pointer: coarse)').matches) {
+      searchInputRef.current?.focus();
+    }
   }, []);
 
   const loadGroups = async () => {
