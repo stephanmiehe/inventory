@@ -487,7 +487,7 @@ app.post('/api/products/lookup', async (req, res) => {
       
       const result = stmts.insertProduct.run(
         productData.barcode, productData.name, productData.name_de,
-        productData.brand, productData.image_url, 0
+        productData.brand, productData.image_url, 0, ''
       );
       product = stmts.getProduct.get(barcode);
     } else if (!product.name_de && product.name) {

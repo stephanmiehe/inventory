@@ -27,8 +27,11 @@
   border-radius: 12px;
   background: var(--bg-secondary);
   cursor: pointer;
-  transition: all 0.2s;
+  transition: border-color 0.2s, background 0.2s, box-shadow 0.2s;
   min-width: 64px;
+  min-height: 48px;
+  position: relative;
+  z-index: 1;
   -webkit-tap-highlight-color: transparent;
 }
 
