@@ -75,7 +75,7 @@ function App() {
   const [scannedBarcode, setScannedBarcode] = useState(null);
   const [scanOutMaxQty, setScanOutMaxQty] = useState(1);
   const [selectedStore, setSelectedStore] = useState(() => {
-    return localStorage.getItem('selectedStore') || 'other';
+    return localStorage.getItem('selectedStore') || 'lidl';
   });
   const [darkMode, setDarkMode] = useState(() => {
     const saved = localStorage.getItem('darkMode');
