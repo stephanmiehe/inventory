@@ -74,11 +74,21 @@ db.exec(`
     product_name TEXT,
     barcode TEXT,
     device TEXT,
+    browser TEXT,
+    os TEXT,
     ip TEXT,
     created_at TEXT DEFAULT (datetime('now'))
   );
   CREATE INDEX IF NOT EXISTS idx_audit_created ON audit_log(created_at);
 `);
+
+// Add browser/os columns if missing
+try {
+  db.prepare("SELECT browser FROM audit_log LIMIT 0").get();
+} catch {
+  db.exec("ALTER TABLE audit_log ADD COLUMN browser TEXT");
+  db.exec("ALTER TABLE audit_log ADD COLUMN os TEXT");
+}
 
 // Add group_id column if missing
 try {
@@ -176,30 +186,59 @@ app.use('/uploads', authMiddleware);
 
 // --- Audit Logging ---
 const insertAuditLog = db.prepare(
-  'INSERT INTO audit_log (action, details, product_name, barcode, device, ip) VALUES (?, ?, ?, ?, ?, ?)'
+  'INSERT INTO audit_log (action, details, product_name, barcode, device, browser, os, ip) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
 );
 
-function parseDevice(req) {
+function parseUA(req) {
   const ua = req.headers['user-agent'] || '';
-  const deviceName = req.headers['x-device-name'] || '';
-  if (deviceName) return deviceName;
-  if (/iPhone/.test(ua)) return 'iPhone';
-  if (/iPad/.test(ua)) return 'iPad';
-  if (/Android/.test(ua)) {
-    const m = ua.match(/Android[^;]*;\s*([^)]+)\)/);
-    return m ? m[1].trim() : 'Android';
+
+  // Device
+  let device = req.headers['x-device-name'] || '';
+  if (!device) {
+    if (/iPhone/.test(ua)) device = 'iPhone';
+    else if (/iPad/.test(ua)) device = 'iPad';
+    else if (/Android/.test(ua)) {
+      const m = ua.match(/Android[^;]*;\s*([^)]+)\)/);
+      device = m ? m[1].trim() : 'Android';
+    }
+    else if (/Macintosh/.test(ua)) device = 'Mac';
+    else if (/Windows/.test(ua)) device = 'Windows PC';
+    else if (/Linux/.test(ua)) device = 'Linux';
+    else device = 'Unbekannt';
   }
-  if (/Macintosh/.test(ua)) return 'Mac';
-  if (/Windows/.test(ua)) return 'Windows PC';
-  if (/Linux/.test(ua)) return 'Linux';
-  return ua.substring(0, 50) || 'Unbekannt';
+
+  // Browser
+  let browser = '';
+  if (/EdgA?\/(\d+[\d.]*)/.test(ua)) browser = 'Edge ' + ua.match(/EdgA?\/(\d+[\d.]*)/)[1];
+  else if (/SamsungBrowser\/(\d+[\d.]*)/.test(ua)) browser = 'Samsung ' + ua.match(/SamsungBrowser\/(\d+[\d.]*)/)[1];
+  else if (/OPR\/(\d+[\d.]*)/.test(ua)) browser = 'Opera ' + ua.match(/OPR\/(\d+[\d.]*)/)[1];
+  else if (/CriOS\/(\d+[\d.]*)/.test(ua)) browser = 'Chrome ' + ua.match(/CriOS\/(\d+[\d.]*)/)[1];
+  else if (/FxiOS\/(\d+[\d.]*)/.test(ua)) browser = 'Firefox ' + ua.match(/FxiOS\/(\d+[\d.]*)/)[1];
+  else if (/Chrome\/(\d+[\d.]*)/.test(ua) && !/Chromium/.test(ua)) browser = 'Chrome ' + ua.match(/Chrome\/(\d+[\d.]*)/)[1];
+  else if (/Version\/(\d+[\d.]*).*Safari/.test(ua)) browser = 'Safari ' + ua.match(/Version\/(\d+[\d.]*)/)[1];
+  else if (/Firefox\/(\d+[\d.]*)/.test(ua)) browser = 'Firefox ' + ua.match(/Firefox\/(\d+[\d.]*)/)[1];
+
+  // OS
+  let os = '';
+  if (/iPhone OS (\d+[_\d]*)/.test(ua)) os = 'iOS ' + ua.match(/iPhone OS (\d+[_\d]*)/)[1].replace(/_/g, '.');
+  else if (/iPad.*OS (\d+[_\d]*)/.test(ua)) os = 'iPadOS ' + ua.match(/OS (\d+[_\d]*)/)[1].replace(/_/g, '.');
+  else if (/Android (\d+[\d.]*)/.test(ua)) os = 'Android ' + ua.match(/Android (\d+[\d.]*)/)[1];
+  else if (/Mac OS X (\d+[_\d.]*)/.test(ua)) os = 'macOS ' + ua.match(/Mac OS X (\d+[_\d.]*)/)[1].replace(/_/g, '.');
+  else if (/Windows NT (\d+\.\d+)/.test(ua)) {
+    const nt = ua.match(/Windows NT (\d+\.\d+)/)[1];
+    const winMap = { '10.0': '10/11', '6.3': '8.1', '6.2': '8', '6.1': '7' };
+    os = 'Windows ' + (winMap[nt] || nt);
+  }
+  else if (/Linux/.test(ua)) os = 'Linux';
+
+  return { device, browser, os };
 }
 
 function logAction(req, action, details, productName, barcode) {
   try {
-    const device = parseDevice(req);
+    const { device, browser, os } = parseUA(req);
     const ip = (req.headers['x-real-ip'] || req.ip || '').replace(/^::ffff:/, '');
-    insertAuditLog.run(action, details || null, productName || null, barcode || null, device, ip);
+    insertAuditLog.run(action, details || null, productName || null, barcode || null, device, browser || null, os || null, ip);
   } catch (e) {
     console.error('Audit log error:', e);
   }

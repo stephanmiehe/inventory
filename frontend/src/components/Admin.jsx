@@ -91,6 +91,8 @@ export default function Admin({ onBack }) {
                   <div className="log-meta">
                     <span className="log-time" title={t.full}>{t.relative}</span>
                     {log.device && <span className="log-device">📱 {log.device}</span>}
+                    {log.browser && <span className="log-browser">🌐 {log.browser}</span>}
+                    {log.os && <span className="log-os">💻 {log.os}</span>}
                     {log.ip && <span className="log-ip">{log.ip}</span>}
                   </div>
                 </div>

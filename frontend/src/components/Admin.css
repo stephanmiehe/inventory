@@ -110,13 +110,16 @@
   cursor: help;
 }
 
-.log-device {
+.log-device,
+.log-browser,
+.log-os {
   white-space: nowrap;
 }
 
 .log-ip {
   opacity: 0.6;
 }
+
 
 .admin-pagination {
   display: flex;
