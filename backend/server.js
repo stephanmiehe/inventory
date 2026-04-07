@@ -73,6 +73,8 @@ db.exec(`
     details TEXT,
     product_name TEXT,
     barcode TEXT,
+    quantity INTEGER,
+    store TEXT,
     device TEXT,
     browser TEXT,
     os TEXT,
@@ -82,12 +84,14 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_audit_created ON audit_log(created_at);
 `);
 
-// Add browser/os columns if missing
-try {
-  db.prepare("SELECT browser FROM audit_log LIMIT 0").get();
-} catch {
+// Add columns if missing (migrations)
+try { db.prepare("SELECT browser FROM audit_log LIMIT 0").get(); } catch {
   db.exec("ALTER TABLE audit_log ADD COLUMN browser TEXT");
   db.exec("ALTER TABLE audit_log ADD COLUMN os TEXT");
+}
+try { db.prepare("SELECT quantity FROM audit_log LIMIT 0").get(); } catch {
+  db.exec("ALTER TABLE audit_log ADD COLUMN quantity INTEGER");
+  db.exec("ALTER TABLE audit_log ADD COLUMN store TEXT");
 }
 
 // Add group_id column if missing
@@ -186,7 +190,7 @@ app.use('/uploads', authMiddleware);
 
 // --- Audit Logging ---
 const insertAuditLog = db.prepare(
-  'INSERT INTO audit_log (action, details, product_name, barcode, device, browser, os, ip) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
+  'INSERT INTO audit_log (action, details, product_name, barcode, quantity, store, device, browser, os, ip) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
 );
 
 function parseUA(req) {
@@ -234,11 +238,11 @@ function parseUA(req) {
   return { device, browser, os };
 }
 
-function logAction(req, action, details, productName, barcode) {
+function logAction(req, action, details, productName, barcode, quantity, store) {
   try {
     const { device, browser, os } = parseUA(req);
     const ip = (req.headers['x-real-ip'] || req.ip || '').replace(/^::ffff:/, '');
-    insertAuditLog.run(action, details || null, productName || null, barcode || null, device, browser || null, os || null, ip);
+    insertAuditLog.run(action, details || null, productName || null, barcode || null, quantity || null, store || null, device, browser || null, os || null, ip);
   } catch (e) {
     console.error('Audit log error:', e);
   }
@@ -699,7 +703,7 @@ app.post('/api/inventory/scan-in', async (req, res) => {
     insertMany(count);
     
     res.json({ message: `${count} Artikel eingebucht`, product, quantity: count });
-    logAction(req, 'Eingebucht', `${count}× eingebucht`, product.name_de || product.name, barcode);
+    logAction(req, 'Eingebucht', `${count}× eingebucht`, product.name_de || product.name, barcode, count, store);
     broadcastChange();
   } catch (error) {
     console.error('Error scanning in item:', error);
@@ -741,7 +745,7 @@ app.post('/api/inventory/scan-out', async (req, res) => {
     removeMany(activeItems);
     
     res.json({ message: `${toRemove} Artikel ausgebucht`, product, quantity: toRemove });
-    logAction(req, 'Ausgebucht', `${toRemove}× ausgebucht`, product.name_de || product.name, barcode);
+    logAction(req, 'Ausgebucht', `${toRemove}× ausgebucht`, product.name_de || product.name, barcode, toRemove);
     broadcastChange();
   } catch (error) {
     console.error('Error scanning out item:', error);
@@ -824,7 +828,7 @@ app.post('/api/inventory/set-quantity', (req, res) => {
     adjustQty();
 
     res.json({ message: `Menge auf ${newQty} gesetzt`, product, quantity: newQty });
-    logAction(req, 'Menge geändert', `${currentQty} → ${newQty}`, product.name_de || product.name, barcode);
+    logAction(req, 'Menge geändert', `${currentQty} → ${newQty}`, product.name_de || product.name, barcode, newQty);
     broadcastChange();
   } catch (error) {
     console.error('Error setting quantity:', error);
@@ -852,7 +856,7 @@ app.post('/api/products/set-ideal-stock', (req, res) => {
     stmts.setIdealStock.run(newIdeal, barcode);
 
     res.json({ message: 'Soll-Bestand aktualisiert', product: stmts.getProduct.get(barcode) });
-    logAction(req, 'Soll geändert', `${oldIdeal} → ${newIdeal}`, product.name_de || product.name, barcode);
+    logAction(req, 'Soll geändert', `${oldIdeal} → ${newIdeal}`, product.name_de || product.name, barcode, newIdeal);
     broadcastChange();
   } catch (error) {
     console.error('Error setting ideal stock:', error);
