@@ -383,7 +383,6 @@ function App() {
                 localStorage.setItem('selectedStore', store);
               }}
             />
-            <p className="instruction">Barcode eines gekauften Artikels scannen</p>
             {loading && <div className="loading-indicator">Produkt wird gesucht…</div>}
             <BarcodeScanner
               onScan={(barcode) => handleScan(barcode, 'in')}
