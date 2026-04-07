@@ -11,6 +11,7 @@ function ShoppingList({ refreshKey }) {
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [zoomImage, setZoomImage] = useState(null);
 
   const loadShoppingList = async () => {
     setError(null);
@@ -113,7 +114,7 @@ function ShoppingList({ refreshKey }) {
             {grouped[storeId].map((item) => (
               <div key={item.id} className="sl-item">
                 {item.image_url && (
-                  <div className="sl-item-image">
+                  <div className="sl-item-image" onClick={() => setZoomImage({ url: item.image_url, name: item.name_de || item.name })}>
                     <img src={item.image_url} alt={item.name} />
                   </div>
                 )}
@@ -142,6 +143,15 @@ function ShoppingList({ refreshKey }) {
           </div>
         </div>
       ))}
+      {zoomImage && (
+        <div className="image-zoom-overlay" onClick={() => setZoomImage(null)}>
+          <div className="image-zoom-content" onClick={(e) => e.stopPropagation()}>
+            <img src={zoomImage.url} alt={zoomImage.name} />
+            <p className="image-zoom-name">{zoomImage.name}</p>
+            <button className="image-zoom-close" onClick={() => setZoomImage(null)}>✕</button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
