@@ -517,30 +517,32 @@ function Inventory({ inventory, onRefresh, setInventory }) {
                     </div>
                   ) : (
                     <>
-                      <div className="group-header" onClick={() => toggleGroup(g.group_id)}>
-                        {imageUrl && (
-                          <div className="group-thumb" onClick={(e) => { e.stopPropagation(); setZoomImage({ url: imageUrl, name: g.group_name_de || g.group_name }); }}>
-                            <img src={imageUrl} alt={g.group_name} loading="lazy" />
-                          </div>
-                        )}
-                        <div className="group-info">
-                          <h3><Highlight text={g.group_name_de || g.group_name} words={searchWords} /> <span className="group-badge">{g.members.length} Varianten</span></h3>
+                      {imageUrl && (
+                        <div className="item-image" onClick={() => setZoomImage({ url: imageUrl, name: g.group_name_de || g.group_name })}>
+                          <img src={imageUrl} alt={g.group_name} loading="lazy" />
                         </div>
-                        <button className="group-edit-btn" onClick={(e) => { e.stopPropagation(); startEditingGroup(g); }} title="Gruppe bearbeiten">✏️</button>
-                        <span className={`group-toggle ${expanded ? 'expanded' : ''}`}>▶</span>
-                      </div>
-                      <div className="item-meta">
-                        <div className="qty-row">
-                          <span className="qty-label">Ist (gesamt)</span>
-                          <span className="qty-display">{g.totalQuantity}</span>
-                        </div>
-                        <div className="qty-row">
-                          <span className="qty-label">Soll</span>
-                          <div className="qty-inline soll">
-                            <button className="qty-btn-sm" onClick={() => handleSetGroupIdealStock(g.group_id, g.group_ideal_stock - 1)} disabled={g.group_ideal_stock <= 0}>−</button>
-                            <span className={`qty-display ${isLow ? 'low' : ''}`}>{g.group_ideal_stock}</span>
-                            <button className="qty-btn-sm" onClick={() => handleSetGroupIdealStock(g.group_id, g.group_ideal_stock + 1)}>+</button>
+                      )}
+                      <div className="item-details">
+                        <h3><Highlight text={g.group_name_de || g.group_name} words={searchWords} /> <span className="group-badge">{g.members.length} Varianten</span></h3>
+                        <div className="item-meta">
+                          <div className="qty-row">
+                            <span className="qty-label">Ist (gesamt)</span>
+                            <span className="qty-display">{g.totalQuantity}</span>
                           </div>
+                          <div className="qty-row">
+                            <span className="qty-label">Soll</span>
+                            <div className="qty-inline soll">
+                              <button className="qty-btn-sm" onClick={() => handleSetGroupIdealStock(g.group_id, g.group_ideal_stock - 1)} disabled={g.group_ideal_stock <= 0}>−</button>
+                              <span className={`qty-display ${isLow ? 'low' : ''}`}>{g.group_ideal_stock}</span>
+                              <button className="qty-btn-sm" onClick={() => handleSetGroupIdealStock(g.group_id, g.group_ideal_stock + 1)}>+</button>
+                            </div>
+                          </div>
+                        </div>
+                        <div className="item-actions">
+                          <button className="edit-btn" onClick={() => startEditingGroup(g)}>✏️ Bearbeiten</button>
+                          <button className="group-expand-btn" onClick={() => toggleGroup(g.group_id)}>
+                            {expanded ? '▲ Zuklappen' : '▼ Varianten anzeigen'}
+                          </button>
                         </div>
                       </div>
                     </>
