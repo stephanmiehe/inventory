@@ -17,7 +17,10 @@ function BarcodeScanner({ onScan, disabled }) {
   const inputRef = useRef(null);
 
   useEffect(() => {
-    if (disabled) return;
+    if (disabled) {
+      stopCamera();
+      return;
+    }
     detectorRef.current = new BarcodeDetector({ formats: BARCODE_FORMATS });
     startCamera();
     return () => stopCamera();

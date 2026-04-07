@@ -364,7 +364,7 @@ function App() {
             {loading && <div className="loading-indicator">Produkt wird gesucht…</div>}
             <BarcodeScanner
               onScan={(barcode) => handleScan(barcode, 'in')}
-              disabled={loading}
+              disabled={loading || showModal || showEditForm}
             />
           </div>
         )}
@@ -375,7 +375,7 @@ function App() {
             {loading && <div className="loading-indicator">Produkt wird gesucht…</div>}
             <BarcodeScanner
               onScan={(barcode) => handleScan(barcode, 'out')}
-              disabled={loading}
+              disabled={loading || showScanOutModal}
             />
           </div>
         )}
