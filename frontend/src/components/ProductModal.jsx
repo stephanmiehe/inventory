@@ -5,6 +5,49 @@ import './ProductModal.css';
 
 function ProductModal({ product, barcode, onConfirm, onEdit, onCancel }) {
   const [quantity, setQuantity] = useState(1);
+  const [similar, setSimilar] = useState([]);
+  const [grouping, setGrouping] = useState(false);
+
+  useEffect(() => {
+    if (!barcode) return;
+    authFetch(`/api/products/similar?barcode=${encodeURIComponent(barcode)}`)
+      .then(r => r.ok ? r.json() : [])
+      .then(data => setSimilar(data.filter(p => !p.group_id || p.group_id !== product.group_id)))
+      .catch(() => {});
+  }, [barcode]);
+
+  const handleGroupWith = async (targetBarcode) => {
+    setGrouping(true);
+    try {
+      // Check if target is already in a group
+      const target = similar.find(p => p.barcode === targetBarcode);
+      if (target?.group_id) {
+        await authFetch('/api/groups/add-product', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ barcode, group_id: target.group_id }),
+        });
+      } else {
+        // Create a new group with both products
+        const groupName = product.name_de || product.name;
+        await authFetch('/api/groups/create', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            name: groupName,
+            name_de: groupName,
+            image_url: product.image_url || '',
+            ideal_stock: product.ideal_stock || 0,
+            barcodes: [barcode, targetBarcode]
+          }),
+        });
+      }
+    } catch (error) {
+      console.error('Error grouping products:', error);
+    }
+    setGrouping(false);
+    onConfirm(quantity);
+  };
 
   return (
     <div className="modal-overlay">
@@ -23,6 +66,19 @@ function ProductModal({ product, barcode, onConfirm, onEdit, onCancel }) {
             <p className="barcode-text">Barcode: {barcode}</p>
           </div>
         </div>
+
+        {similar.length > 0 && (
+          <div className="similar-products">
+            <p className="similar-hint">🔗 Ähnliche Produkte gefunden — zusammen gruppieren?</p>
+            {similar.map(s => (
+              <button key={s.barcode} className="similar-option" onClick={() => handleGroupWith(s.barcode)} disabled={grouping}>
+                <span className="similar-name">{s.name_de || s.name}</span>
+                {s.brand && <span className="similar-brand">{s.brand}</span>}
+                <span className="similar-qty">Bestand: {s.quantity}</span>
+              </button>
+            ))}
+          </div>
+        )}
 
         <p className="confirmation-question">Ist dies das richtige Produkt?</p>
 

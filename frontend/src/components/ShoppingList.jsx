@@ -65,13 +65,25 @@ function ShoppingList({ refreshKey }) {
 
   const handleRemoveFromList = async (item) => {
     try {
-      const response = await authFetch('/api/products/set-ideal-stock', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ barcode: item.barcode, ideal_stock: item.current_stock }),
-      });
-      if (response.ok) {
-        setItems(prev => prev.filter(i => i.barcode !== item.barcode));
+      if (item.is_group && item.group_id) {
+        // Set group ideal_stock to current total stock
+        const response = await authFetch('/api/groups/update', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ group_id: Number(String(item.group_id)), ideal_stock: item.current_stock }),
+        });
+        if (response.ok) {
+          setItems(prev => prev.filter(i => i.id !== item.id));
+        }
+      } else {
+        const response = await authFetch('/api/products/set-ideal-stock', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ barcode: item.barcode, ideal_stock: item.current_stock }),
+        });
+        if (response.ok) {
+          setItems(prev => prev.filter(i => i.barcode !== item.barcode));
+        }
       }
     } catch (error) {
       console.error('Error removing from shopping list:', error);
@@ -83,10 +95,11 @@ function ShoppingList({ refreshKey }) {
   for (const item of items) {
     const stores = parseStores(item.store);
     const keys = stores.length > 0 ? stores : ['other'];
+    const itemKey = item.id || item.barcode;
     for (const key of keys) {
       const normalizedKey = STORE_ORDER.includes(key) ? key : 'other';
       if (!grouped[normalizedKey]) grouped[normalizedKey] = [];
-      if (!grouped[normalizedKey].some(i => i.barcode === item.barcode)) {
+      if (!grouped[normalizedKey].some(i => (i.id || i.barcode) === itemKey)) {
         grouped[normalizedKey].push(item);
       }
     }
@@ -118,15 +131,18 @@ function ShoppingList({ refreshKey }) {
 
           <div className="sl-items">
             {grouped[storeId].map((item) => (
-              <div key={item.id} className="sl-item">
+              <div key={item.id || item.barcode} className="sl-item">
                 {item.image_url && (
                   <div className="sl-item-image" onClick={() => setZoomImage({ url: item.image_url, name: item.name_de || item.name })}>
                     <img src={item.image_url} alt={item.name} loading="lazy" />
                   </div>
                 )}
                 <div className="sl-item-details">
-                  <h3>{item.name_de || item.name}</h3>
-                  {item.name_de && item.name_de.toLowerCase() !== item.name.toLowerCase() && (
+                  <h3>
+                    {item.name_de || item.name}
+                    {item.is_group && <span className="sl-group-badge">{item.members?.length} Varianten</span>}
+                  </h3>
+                  {!item.is_group && item.name_de && item.name_de.toLowerCase() !== item.name.toLowerCase() && (
                     <p className="sl-original-name">{item.name}</p>
                   )}
                   {item.brand && <p className="sl-brand">{item.brand}</p>}

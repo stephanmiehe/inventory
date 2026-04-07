@@ -33,23 +33,24 @@ function Inventory({ inventory, onRefresh, setInventory }) {
   const [editingProduct, setEditingProduct] = useState(null);
   const [editForm, setEditForm] = useState({ name: '', name_de: '', brand: '', image_url: '' });
   const [zoomImage, setZoomImage] = useState(null);
+  const [expandedGroups, setExpandedGroups] = useState(new Set());
+  const [groupingProduct, setGroupingProduct] = useState(null);
+  const [groups, setGroups] = useState([]);
+  const [newGroupName, setNewGroupName] = useState('');
 
-  // Debounce search input
   useEffect(() => {
     const timer = setTimeout(() => setDebouncedSearch(search), 200);
     return () => clearTimeout(timer);
   }, [search]);
 
-  const formatDate = (dateString) => {
-    const date = new Date(dateString);
-    return date.toLocaleDateString('de-DE', {
-      day: 'numeric',
-      month: 'short',
-      year: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit'
-    });
+  const loadGroups = async () => {
+    try {
+      const res = await authFetch('/api/groups');
+      if (res.ok) setGroups(await res.json());
+    } catch {}
   };
+
+  useEffect(() => { loadGroups(); }, []);
 
   if (inventory.length === 0) {
     return (
@@ -68,7 +69,6 @@ function Inventory({ inventory, onRefresh, setInventory }) {
         item.barcode === barcode ? { ...item, quantity: newQty } : item
       )
     );
-
     try {
       await authFetch('/api/inventory/set-quantity', {
         method: 'POST',
@@ -88,7 +88,6 @@ function Inventory({ inventory, onRefresh, setInventory }) {
         item.barcode === barcode ? { ...item, ideal_stock: newIdeal } : item
       )
     );
-
     try {
       await authFetch('/api/products/set-ideal-stock', {
         method: 'POST',
@@ -101,11 +100,23 @@ function Inventory({ inventory, onRefresh, setInventory }) {
     }
   };
 
+  const handleSetGroupIdealStock = async (groupId, idealStock) => {
+    const newIdeal = Math.max(0, idealStock);
+    try {
+      await authFetch('/api/groups/update', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ group_id: groupId, ideal_stock: newIdeal }),
+      });
+      onRefresh();
+    } catch (error) {
+      console.error('Error setting group ideal stock:', error);
+    }
+  };
+
   const handleDelete = async (barcode) => {
     try {
-      const response = await authFetch(`/api/inventory/${barcode}`, {
-        method: 'DELETE',
-      });
+      const response = await authFetch(`/api/inventory/${barcode}`, { method: 'DELETE' });
       if (response.ok) {
         setConfirmDelete(null);
         onRefresh();
@@ -143,22 +154,199 @@ function Inventory({ inventory, onRefresh, setInventory }) {
     }
   };
 
+  const handleAddToGroup = async (barcode, groupId) => {
+    try {
+      await authFetch('/api/groups/add-product', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ barcode, group_id: groupId }),
+      });
+      setGroupingProduct(null);
+      onRefresh();
+      loadGroups();
+    } catch (error) {
+      console.error('Error adding to group:', error);
+    }
+  };
+
+  const handleCreateGroupWith = async (barcode) => {
+    const product = inventory.find(i => i.barcode === barcode);
+    const groupName = newGroupName.trim() || product?.name_de || product?.name || 'Neue Gruppe';
+    try {
+      const res = await authFetch('/api/groups/create', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: groupName,
+          name_de: groupName,
+          image_url: product?.image_url || '',
+          ideal_stock: product?.ideal_stock || 0,
+          barcodes: [barcode]
+        }),
+      });
+      if (res.ok) {
+        setGroupingProduct(null);
+        setNewGroupName('');
+        onRefresh();
+        loadGroups();
+      }
+    } catch (error) {
+      console.error('Error creating group:', error);
+    }
+  };
+
+  const handleRemoveFromGroup = async (barcode) => {
+    try {
+      await authFetch('/api/groups/remove-product', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ barcode }),
+      });
+      onRefresh();
+      loadGroups();
+    } catch (error) {
+      console.error('Error removing from group:', error);
+    }
+  };
+
+  const toggleGroup = (groupId) => {
+    setExpandedGroups(prev => {
+      const next = new Set(prev);
+      if (next.has(groupId)) next.delete(groupId); else next.add(groupId);
+      return next;
+    });
+  };
+
   const query = debouncedSearch.toLowerCase().trim();
   const filtered = query
     ? inventory.filter(item =>
         item.name.toLowerCase().includes(query) ||
         (item.name_de && item.name_de.toLowerCase().includes(query)) ||
         (item.brand && item.brand.toLowerCase().includes(query)) ||
+        (item.group_name && item.group_name.toLowerCase().includes(query)) ||
+        (item.group_name_de && item.group_name_de.toLowerCase().includes(query)) ||
         item.barcode.includes(query)
       )
     : inventory;
 
-  const sorted = useMemo(() => 
-    [...filtered].sort((a, b) => 
-      (a.name_de || a.name).localeCompare(b.name_de || b.name, 'de')
-    ),
-    [filtered]
-  );
+  // Build grouped + ungrouped display items
+  const displayItems = useMemo(() => {
+    const groupMap = new Map();
+    const ungrouped = [];
+
+    for (const item of filtered) {
+      if (item.group_id) {
+        if (!groupMap.has(item.group_id)) {
+          groupMap.set(item.group_id, {
+            type: 'group',
+            group_id: item.group_id,
+            group_name: item.group_name,
+            group_name_de: item.group_name_de,
+            group_image_url: item.group_image_url,
+            group_ideal_stock: item.group_ideal_stock || 0,
+            members: [],
+            totalQuantity: 0,
+            last_added: null,
+          });
+        }
+        const g = groupMap.get(item.group_id);
+        g.members.push(item);
+        g.totalQuantity += item.quantity;
+        if (!g.last_added || item.last_added > g.last_added) g.last_added = item.last_added;
+      } else {
+        ungrouped.push({ type: 'single', item });
+      }
+    }
+
+    const all = [
+      ...Array.from(groupMap.values()),
+      ...ungrouped
+    ];
+
+    all.sort((a, b) => {
+      const nameA = a.type === 'group' ? (a.group_name_de || a.group_name) : (a.item.name_de || a.item.name);
+      const nameB = b.type === 'group' ? (b.group_name_de || b.group_name) : (b.item.name_de || b.item.name);
+      return (nameA || '').localeCompare(nameB || '', 'de');
+    });
+
+    return all;
+  }, [filtered]);
+
+  const totalProducts = displayItems.reduce((n, d) => n + (d.type === 'group' ? d.members.length : 1), 0);
+  const totalArticles = displayItems.reduce((n, d) => n + (d.type === 'group' ? d.totalQuantity : d.item.quantity), 0);
+
+  const renderItemCard = (item) => {
+    const isLow = item.ideal_stock > 0 && item.quantity < item.ideal_stock;
+    return (
+      <div className={`inventory-item${isLow ? ' low-stock' : ''}`}>
+        {isLow && <span className="low-stock-badge">Nachkaufen</span>}
+        {editingProduct === item.barcode ? (
+          <div className="product-edit-form">
+            <h3>Produkt bearbeiten</h3>
+            <ProductFormFields formData={editForm} setFormData={setEditForm} barcode={item.barcode} />
+            <div className="edit-store-section">
+              <StoreSelector selected={editForm.store} onSelect={(store) => setEditForm(prev => ({ ...prev, store }))} multi />
+            </div>
+            <div className="edit-actions">
+              <button className="save-btn" onClick={() => handleSaveProduct(item.barcode)}>Speichern</button>
+              <button className="cancel-btn-sm" onClick={() => setEditingProduct(null)}>Abbrechen</button>
+            </div>
+          </div>
+        ) : (
+          <>
+            {item.image_url && (
+              <div className="item-image" onClick={() => setZoomImage({ url: item.image_url, name: item.name_de || item.name })}>
+                <img src={item.image_url} alt={item.name} loading="lazy" />
+              </div>
+            )}
+            <div className="item-details">
+              <h3>{item.name_de || item.name}</h3>
+              {item.name_de && <p className="name-original">{item.name}</p>}
+              {item.brand && <p className="brand">{item.brand}</p>}
+              <div className="item-meta">
+                <div className="qty-row">
+                  <span className="qty-label">Ist</span>
+                  <div className="qty-inline">
+                    <button className="qty-btn-sm" onClick={() => handleSetQuantity(item.barcode, item.quantity - 1)} disabled={item.quantity <= 0}>−</button>
+                    <span className="qty-display">{item.quantity}</span>
+                    <button className="qty-btn-sm" onClick={() => handleSetQuantity(item.barcode, item.quantity + 1)}>+</button>
+                  </div>
+                </div>
+                {!item.group_id && (
+                  <div className="qty-row">
+                    <span className="qty-label">Soll</span>
+                    <div className="qty-inline soll">
+                      <button className="qty-btn-sm" onClick={() => handleSetIdealStock(item.barcode, (item.ideal_stock || 0) - 1)} disabled={(item.ideal_stock || 0) <= 0}>−</button>
+                      <span className={`qty-display ${item.ideal_stock > 0 && item.quantity < item.ideal_stock ? 'low' : ''}`}>{item.ideal_stock || 0}</span>
+                      <button className="qty-btn-sm" onClick={() => handleSetIdealStock(item.barcode, (item.ideal_stock || 0) + 1)}>+</button>
+                    </div>
+                  </div>
+                )}
+              </div>
+              <div className="item-actions">
+                <button className="edit-btn" onClick={() => startEditingProduct(item)}>✏️ Bearbeiten</button>
+                {!item.group_id && (
+                  <button className="group-btn" onClick={() => { setGroupingProduct(item.barcode); loadGroups(); }}>🔗 Gruppieren</button>
+                )}
+                {item.group_id && (
+                  <button className="ungroup-btn" onClick={() => handleRemoveFromGroup(item.barcode)}>🔗✕ Entgruppieren</button>
+                )}
+                {confirmDelete === item.barcode ? (
+                  <div className="confirm-delete">
+                    <span>Alles löschen?</span>
+                    <button className="confirm-yes" onClick={() => handleDelete(item.barcode)}>Ja</button>
+                    <button className="confirm-no" onClick={() => setConfirmDelete(null)}>Nein</button>
+                  </div>
+                ) : (
+                  <button className="delete-btn" onClick={() => setConfirmDelete(item.barcode)}>🗑️ Entfernen</button>
+                )}
+              </div>
+            </div>
+          </>
+        )}
+      </div>
+    );
+  };
 
   return (
     <div className="inventory">
@@ -180,120 +368,119 @@ function Inventory({ inventory, onRefresh, setInventory }) {
         )}
       </div>
 
-      {sorted.length === 0 && (
+      {displayItems.length === 0 && (
         <div className="no-results">
           <p>Keine Artikel gefunden für "{search}"</p>
         </div>
       )}
 
       <div className="inventory-grid">
-        {sorted.map((item) => (
-          <LazyItem key={item.id}>
-          <div className={`inventory-item${item.ideal_stock > 0 && item.quantity < item.ideal_stock ? ' low-stock' : ''}`}>
-            {item.ideal_stock > 0 && item.quantity < item.ideal_stock && (
-              <span className="low-stock-badge">Nachkaufen</span>
-            )}
-            {editingProduct === item.barcode ? (
-              <div className="product-edit-form">
-                <h3>Produkt bearbeiten</h3>
-                <ProductFormFields
-                  formData={editForm}
-                  setFormData={setEditForm}
-                  barcode={item.barcode}
-                />
-                <div className="edit-store-section">
-                  <StoreSelector
-                    selected={editForm.store}
-                    onSelect={(store) => setEditForm(prev => ({ ...prev, store }))}
-                    multi
-                  />
-                </div>
-                <div className="edit-actions">
-                  <button className="save-btn" onClick={() => handleSaveProduct(item.barcode)}>Speichern</button>
-                  <button className="cancel-btn-sm" onClick={() => setEditingProduct(null)}>Abbrechen</button>
-                </div>
-              </div>
-            ) : (
-              <>
-            {item.image_url && (
-              <div className="item-image" onClick={() => setZoomImage({ url: item.image_url, name: item.name_de || item.name })}>
-                <img src={item.image_url} alt={item.name} loading="lazy" />
-              </div>
-            )}
-            <div className="item-details">
-              <h3>{item.name_de || item.name}</h3>
-              {item.name_de && <p className="name-original">{item.name}</p>}
-              {item.brand && <p className="brand">{item.brand}</p>}
-              <div className="item-meta">
-                <div className="qty-row">
-                  <span className="qty-label">Ist</span>
-                  <div className="qty-inline">
-                    <button
-                      className="qty-btn-sm"
-                      onClick={() => handleSetQuantity(item.barcode, item.quantity - 1)}
-                      disabled={item.quantity <= 0}
-                    >−</button>
-                    <span className="qty-display">{item.quantity}</span>
-                    <button
-                      className="qty-btn-sm"
-                      onClick={() => handleSetQuantity(item.barcode, item.quantity + 1)}
-                    >+</button>
+        {displayItems.map((display) => {
+          if (display.type === 'group') {
+            const g = display;
+            const expanded = expandedGroups.has(g.group_id);
+            const isLow = g.group_ideal_stock > 0 && g.totalQuantity < g.group_ideal_stock;
+            const imageUrl = g.group_image_url || g.members.find(m => m.image_url)?.image_url;
+            return (
+              <LazyItem key={`group-${g.group_id}`}>
+                <div className={`inventory-item group-card${isLow ? ' low-stock' : ''}`}>
+                  {isLow && <span className="low-stock-badge">Nachkaufen</span>}
+                  <div className="group-header" onClick={() => toggleGroup(g.group_id)}>
+                    {imageUrl && (
+                      <div className="group-thumb" onClick={(e) => { e.stopPropagation(); setZoomImage({ url: imageUrl, name: g.group_name_de || g.group_name }); }}>
+                        <img src={imageUrl} alt={g.group_name} loading="lazy" />
+                      </div>
+                    )}
+                    <div className="group-info">
+                      <h3>{g.group_name_de || g.group_name} <span className="group-badge">{g.members.length} Varianten</span></h3>
+                    </div>
+                    <span className={`group-toggle ${expanded ? 'expanded' : ''}`}>▶</span>
                   </div>
-                </div>
-                <div className="qty-row">
-                  <span className="qty-label">Soll</span>
-                  <div className="qty-inline soll">
-                    <button
-                      className="qty-btn-sm"
-                      onClick={() => handleSetIdealStock(item.barcode, (item.ideal_stock || 0) - 1)}
-                      disabled={(item.ideal_stock || 0) <= 0}
-                    >−</button>
-                    <span className={`qty-display ${item.ideal_stock > 0 && item.quantity < item.ideal_stock ? 'low' : ''}`}>
-                      {item.ideal_stock || 0}
-                    </span>
-                    <button
-                      className="qty-btn-sm"
-                      onClick={() => handleSetIdealStock(item.barcode, (item.ideal_stock || 0) + 1)}
-                    >+</button>
+                  <div className="item-meta">
+                    <div className="qty-row">
+                      <span className="qty-label">Ist (gesamt)</span>
+                      <span className="qty-display">{g.totalQuantity}</span>
+                    </div>
+                    <div className="qty-row">
+                      <span className="qty-label">Soll</span>
+                      <div className="qty-inline soll">
+                        <button className="qty-btn-sm" onClick={() => handleSetGroupIdealStock(g.group_id, g.group_ideal_stock - 1)} disabled={g.group_ideal_stock <= 0}>−</button>
+                        <span className={`qty-display ${isLow ? 'low' : ''}`}>{g.group_ideal_stock}</span>
+                        <button className="qty-btn-sm" onClick={() => handleSetGroupIdealStock(g.group_id, g.group_ideal_stock + 1)}>+</button>
+                      </div>
+                    </div>
                   </div>
+                  {expanded && (
+                    <div className="group-members">
+                      {g.members.map(member => (
+                        <div key={member.barcode} className="group-member-card">
+                          {renderItemCard(member)}
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
-              </div>
-              <div className="item-actions">
-                <button className="edit-btn" onClick={() => startEditingProduct(item)}>
-                  ✏️ Bearbeiten
-                </button>
-                {confirmDelete === item.barcode ? (
-                  <div className="confirm-delete">
-                    <span>Alles löschen?</span>
-                    <button className="confirm-yes" onClick={() => handleDelete(item.barcode)}>Ja</button>
-                    <button className="confirm-no" onClick={() => setConfirmDelete(null)}>Nein</button>
-                  </div>
-                ) : (
-                  <button className="delete-btn" onClick={() => setConfirmDelete(item.barcode)}>
-                    🗑️ Entfernen
-                  </button>
-                )}
-              </div>
-            </div>
-              </>
-            )}
-          </div>
-          </LazyItem>
-        ))}
+              </LazyItem>
+            );
+          } else {
+            const item = display.item;
+            return (
+              <LazyItem key={item.id}>
+                {renderItemCard(item)}
+              </LazyItem>
+            );
+          }
+        })}
       </div>
 
       <div className="inventory-summary">
         <div className="summary-card">
-          <div className="summary-number">{sorted.length}</div>
+          <div className="summary-number">{totalProducts}</div>
           <div className="summary-label">{query ? 'Gefundene Produkte' : 'Verschiedene Produkte'}</div>
         </div>
         <div className="summary-card">
-          <div className="summary-number">
-            {sorted.reduce((sum, item) => sum + item.quantity, 0)}
-          </div>
+          <div className="summary-number">{totalArticles}</div>
           <div className="summary-label">{query ? 'Gefundene Artikel' : 'Artikel gesamt'}</div>
         </div>
       </div>
+
+      {/* Grouping modal */}
+      {groupingProduct && (
+        <div className="modal-overlay" onClick={() => setGroupingProduct(null)}>
+          <div className="modal-content grouping-modal" onClick={(e) => e.stopPropagation()}>
+            <h2>Produkt gruppieren</h2>
+            <p className="grouping-hint">Wähle eine bestehende Gruppe oder erstelle eine neue.</p>
+
+            {groups.length > 0 && (
+              <div className="existing-groups">
+                <h3>Bestehende Gruppen</h3>
+                {groups.map(g => (
+                  <button key={g.id} className="group-option" onClick={() => handleAddToGroup(groupingProduct, g.id)}>
+                    <span className="group-option-name">{g.name_de || g.name}</span>
+                    <span className="group-option-count">{g.member_count} Produkte</span>
+                  </button>
+                ))}
+              </div>
+            )}
+
+            <div className="new-group-section">
+              <h3>Neue Gruppe erstellen</h3>
+              <input
+                type="text"
+                value={newGroupName}
+                onChange={(e) => setNewGroupName(e.target.value)}
+                placeholder="Gruppenname (z.B. Gehackte Tomaten)"
+                className="group-name-input"
+              />
+              <button className="save-btn" onClick={() => handleCreateGroupWith(groupingProduct)}>
+                Gruppe erstellen
+              </button>
+            </div>
+
+            <button className="cancel-btn-sm" onClick={() => setGroupingProduct(null)}>Abbrechen</button>
+          </div>
+        </div>
+      )}
 
       {zoomImage && (
         <div className="image-zoom-overlay" onClick={() => setZoomImage(null)}>

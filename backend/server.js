@@ -53,6 +53,25 @@ try {
   db.exec("ALTER TABLE products ADD COLUMN store TEXT DEFAULT ''");
 }
 
+// --- Product Groups ---
+db.exec(`
+  CREATE TABLE IF NOT EXISTS product_groups (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL,
+    name_de TEXT,
+    image_url TEXT DEFAULT '',
+    ideal_stock INTEGER DEFAULT 0,
+    created_at TEXT DEFAULT (datetime('now'))
+  );
+`);
+
+// Add group_id column if missing
+try {
+  db.prepare("SELECT group_id FROM products LIMIT 0").get();
+} catch {
+  db.exec("ALTER TABLE products ADD COLUMN group_id INTEGER REFERENCES product_groups(id)");
+}
+
 // --- Middleware ---
 app.use(cors({
   origin: process.env.ALLOWED_ORIGINS || 'http://localhost:3000',
@@ -404,12 +423,14 @@ const stmts = {
   `),
   getInventory: db.prepare(`
     SELECT 
-      p.id, p.barcode, p.name, p.name_de, p.brand, p.image_url, p.ideal_stock, p.store,
+      p.id, p.barcode, p.name, p.name_de, p.brand, p.image_url, p.ideal_stock, p.store, p.group_id,
+      g.name as group_name, g.name_de as group_name_de, g.image_url as group_image_url, g.ideal_stock as group_ideal_stock,
       COUNT(CASE WHEN i.scanned_out IS NULL THEN 1 END) as quantity,
       MIN(i.scanned_in) as first_added,
       MAX(i.scanned_in) as last_added
     FROM products p
     INNER JOIN inventory i ON p.barcode = i.barcode
+    LEFT JOIN product_groups g ON p.group_id = g.id
     GROUP BY p.barcode
     ORDER BY last_added DESC
   `),
@@ -431,10 +452,12 @@ const stmts = {
   `),
   getShoppingList: db.prepare(`
     SELECT 
-      p.id, p.barcode, p.name, p.name_de, p.brand, p.image_url, p.ideal_stock, p.store,
+      p.id, p.barcode, p.name, p.name_de, p.brand, p.image_url, p.ideal_stock, p.store, p.group_id,
+      g.name as group_name, g.name_de as group_name_de, g.image_url as group_image_url, g.ideal_stock as group_ideal_stock,
       COUNT(CASE WHEN i.scanned_out IS NULL THEN 1 END) as current_stock
     FROM products p
     LEFT JOIN inventory i ON p.barcode = i.barcode
+    LEFT JOIN product_groups g ON p.group_id = g.id
     WHERE p.ideal_stock > 0
     GROUP BY p.barcode
     HAVING current_stock < p.ideal_stock
@@ -748,13 +771,249 @@ app.post('/api/products/set-ideal-stock', (req, res) => {
 // Shopping list
 app.get('/api/shopping-list', (req, res) => {
   try {
-    const items = stmts.getShoppingList.all().map(item => ({
-      ...item,
-      needed: item.ideal_stock - item.current_stock
-    }));
-    res.json(items);
+    // Get all products that have ideal_stock set (individual or group)
+    const allProducts = db.prepare(`
+      SELECT 
+        p.id, p.barcode, p.name, p.name_de, p.brand, p.image_url, p.ideal_stock, p.store, p.group_id,
+        g.name as group_name, g.name_de as group_name_de, g.image_url as group_image_url, g.ideal_stock as group_ideal_stock,
+        COUNT(CASE WHEN i.scanned_out IS NULL THEN 1 END) as current_stock
+      FROM products p
+      LEFT JOIN inventory i ON p.barcode = i.barcode
+      LEFT JOIN product_groups g ON p.group_id = g.id
+      GROUP BY p.barcode
+    `).all();
+
+    const result = [];
+    const processedGroups = new Set();
+
+    for (const item of allProducts) {
+      if (item.group_id) {
+        if (processedGroups.has(item.group_id)) continue;
+        processedGroups.add(item.group_id);
+
+        // Aggregate all products in this group
+        const groupMembers = allProducts.filter(p => p.group_id === item.group_id);
+        const totalStock = groupMembers.reduce((sum, m) => sum + m.current_stock, 0);
+        const groupIdeal = item.group_ideal_stock || 0;
+        if (groupIdeal <= 0 || totalStock >= groupIdeal) continue;
+
+        // Merge stores from all members
+        const allStores = [...new Set(groupMembers.flatMap(m => (m.store || '').split(',').map(s => s.trim()).filter(Boolean)))];
+
+        result.push({
+          id: `group-${item.group_id}`,
+          group_id: item.group_id,
+          is_group: true,
+          name: item.group_name,
+          name_de: item.group_name_de,
+          image_url: item.group_image_url || groupMembers.find(m => m.image_url)?.image_url || '',
+          ideal_stock: groupIdeal,
+          current_stock: totalStock,
+          needed: groupIdeal - totalStock,
+          store: allStores.join(','),
+          members: groupMembers.map(m => ({ barcode: m.barcode, name: m.name_de || m.name, brand: m.brand, quantity: m.current_stock }))
+        });
+      } else {
+        // Ungrouped product — same logic as before
+        if (item.ideal_stock <= 0 || item.current_stock >= item.ideal_stock) continue;
+        result.push({
+          ...item,
+          is_group: false,
+          needed: item.ideal_stock - item.current_stock
+        });
+      }
+    }
+
+    result.sort((a, b) => ((a.name_de || a.name) || '').localeCompare((b.name_de || b.name) || '', 'de'));
+    res.json(result);
   } catch (error) {
     console.error('Error getting shopping list:', error);
+    res.status(500).json({ error: 'Interner Serverfehler' });
+  }
+});
+
+// --- Product Group API ---
+
+// List all groups
+app.get('/api/groups', (req, res) => {
+  try {
+    const groups = db.prepare(`
+      SELECT g.*, COUNT(p.id) as member_count
+      FROM product_groups g
+      LEFT JOIN products p ON p.group_id = g.id
+      GROUP BY g.id
+      ORDER BY g.name COLLATE NOCASE
+    `).all();
+    res.json(groups);
+  } catch (error) {
+    console.error('Error listing groups:', error);
+    res.status(500).json({ error: 'Interner Serverfehler' });
+  }
+});
+
+// Create a new group (optionally with initial product barcodes)
+app.post('/api/groups/create', (req, res) => {
+  const name = sanitizeString(req.body.name);
+  const name_de = sanitizeString(req.body.name_de) || null;
+  const image_url = sanitizeString(req.body.image_url, MAX_URL_LENGTH) || '';
+  const ideal_stock = Math.max(0, Math.floor(Number(req.body.ideal_stock) || 0));
+  const barcodes = Array.isArray(req.body.barcodes) ? req.body.barcodes : [];
+
+  if (!name) {
+    return res.status(400).json({ error: 'Gruppenname ist erforderlich' });
+  }
+
+  try {
+    const result = db.prepare(
+      'INSERT INTO product_groups (name, name_de, image_url, ideal_stock) VALUES (?, ?, ?, ?)'
+    ).run(name, name_de, image_url, ideal_stock);
+
+    const groupId = result.lastInsertRowid;
+
+    if (barcodes.length > 0) {
+      const assignStmt = db.prepare('UPDATE products SET group_id = ? WHERE barcode = ?');
+      const assignAll = db.transaction((codes) => {
+        for (const bc of codes) assignStmt.run(groupId, bc.trim());
+      });
+      assignAll(barcodes);
+    }
+
+    const group = db.prepare('SELECT * FROM product_groups WHERE id = ?').get(groupId);
+    res.json(group);
+    broadcastChange();
+  } catch (error) {
+    console.error('Error creating group:', error);
+    res.status(500).json({ error: 'Interner Serverfehler' });
+  }
+});
+
+// Add product to group
+app.post('/api/groups/add-product', (req, res) => {
+  const groupId = Number(req.body.group_id);
+  const barcode = req.body.barcode?.trim();
+
+  if (!groupId || !barcode) {
+    return res.status(400).json({ error: 'group_id und barcode sind erforderlich' });
+  }
+
+  try {
+    const group = db.prepare('SELECT * FROM product_groups WHERE id = ?').get(groupId);
+    if (!group) return res.status(404).json({ error: 'Gruppe nicht gefunden' });
+
+    const product = stmts.getProduct.get(barcode);
+    if (!product) return res.status(404).json({ error: 'Produkt nicht gefunden' });
+
+    db.prepare('UPDATE products SET group_id = ? WHERE barcode = ?').run(groupId, barcode);
+    res.json({ message: 'Produkt zur Gruppe hinzugefügt' });
+    broadcastChange();
+  } catch (error) {
+    console.error('Error adding product to group:', error);
+    res.status(500).json({ error: 'Interner Serverfehler' });
+  }
+});
+
+// Remove product from group
+app.post('/api/groups/remove-product', (req, res) => {
+  const barcode = req.body.barcode?.trim();
+
+  if (!barcode) {
+    return res.status(400).json({ error: 'Barcode ist erforderlich' });
+  }
+
+  try {
+    db.prepare('UPDATE products SET group_id = NULL WHERE barcode = ?').run(barcode);
+    res.json({ message: 'Produkt aus Gruppe entfernt' });
+    broadcastChange();
+  } catch (error) {
+    console.error('Error removing product from group:', error);
+    res.status(500).json({ error: 'Interner Serverfehler' });
+  }
+});
+
+// Update group (name, ideal_stock, image)
+app.post('/api/groups/update', (req, res) => {
+  const groupId = Number(req.body.group_id);
+  if (!groupId) return res.status(400).json({ error: 'group_id ist erforderlich' });
+
+  try {
+    const group = db.prepare('SELECT * FROM product_groups WHERE id = ?').get(groupId);
+    if (!group) return res.status(404).json({ error: 'Gruppe nicht gefunden' });
+
+    const name = sanitizeString(req.body.name) || group.name;
+    const name_de = req.body.name_de !== undefined ? (sanitizeString(req.body.name_de) || null) : group.name_de;
+    const image_url = req.body.image_url !== undefined ? (sanitizeString(req.body.image_url, MAX_URL_LENGTH) || '') : group.image_url;
+    const ideal_stock = req.body.ideal_stock !== undefined
+      ? Math.max(0, Math.floor(Number(req.body.ideal_stock) || 0))
+      : group.ideal_stock;
+
+    db.prepare('UPDATE product_groups SET name = ?, name_de = ?, image_url = ?, ideal_stock = ? WHERE id = ?')
+      .run(name, name_de, image_url, ideal_stock, groupId);
+
+    res.json(db.prepare('SELECT * FROM product_groups WHERE id = ?').get(groupId));
+    broadcastChange();
+  } catch (error) {
+    console.error('Error updating group:', error);
+    res.status(500).json({ error: 'Interner Serverfehler' });
+  }
+});
+
+// Delete group (unlinks products, doesn't delete them)
+app.delete('/api/groups/:id', (req, res) => {
+  const groupId = Number(req.params.id);
+  if (!groupId) return res.status(400).json({ error: 'Ungültige Gruppen-ID' });
+
+  try {
+    const deleteGroup = db.transaction(() => {
+      db.prepare('UPDATE products SET group_id = NULL WHERE group_id = ?').run(groupId);
+      db.prepare('DELETE FROM product_groups WHERE id = ?').run(groupId);
+    });
+    deleteGroup();
+    res.json({ message: 'Gruppe gelöscht' });
+    broadcastChange();
+  } catch (error) {
+    console.error('Error deleting group:', error);
+    res.status(500).json({ error: 'Interner Serverfehler' });
+  }
+});
+
+// Fuzzy match: find similar products for grouping suggestion
+app.get('/api/products/similar', (req, res) => {
+  const barcode = req.query.barcode?.trim();
+  if (!barcode) return res.status(400).json({ error: 'Barcode ist erforderlich' });
+
+  try {
+    const product = stmts.getProduct.get(barcode);
+    if (!product) return res.json([]);
+
+    const name = (product.name_de || product.name || '').toLowerCase();
+    if (!name) return res.json([]);
+
+    // Split into keywords, ignoring very short words
+    const keywords = name.split(/\s+/).filter(w => w.length >= 3);
+    if (keywords.length === 0) return res.json([]);
+
+    // Find products that share keywords with this product (but aren't this product)
+    const allProducts = db.prepare(`
+      SELECT p.*, COUNT(CASE WHEN i.scanned_out IS NULL THEN 1 END) as quantity
+      FROM products p
+      LEFT JOIN inventory i ON p.barcode = i.barcode
+      WHERE p.barcode != ?
+      GROUP BY p.barcode
+    `).all(barcode);
+
+    const matches = allProducts
+      .map(p => {
+        const pName = (p.name_de || p.name || '').toLowerCase();
+        const matchCount = keywords.filter(kw => pName.includes(kw)).length;
+        return { ...p, matchScore: matchCount / keywords.length };
+      })
+      .filter(p => p.matchScore >= 0.5)
+      .sort((a, b) => b.matchScore - a.matchScore)
+      .slice(0, 5);
+
+    res.json(matches);
+  } catch (error) {
+    console.error('Error finding similar products:', error);
     res.status(500).json({ error: 'Interner Serverfehler' });
   }
 });

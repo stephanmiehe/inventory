@@ -391,3 +391,62 @@
   align-items: center;
   justify-content: center;
 }
+
+/* --- Similar products suggestion --- */
+.similar-products {
+  margin: 12px 0;
+  padding: 12px;
+  background: var(--bg-secondary, #f0f4ff);
+  border-radius: 10px;
+  border: 1px solid var(--accent, #667eea);
+}
+
+.similar-hint {
+  font-size: 0.85rem;
+  font-weight: 600;
+  margin: 0 0 8px 0;
+  color: var(--text-primary, #333);
+}
+
+.similar-option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 8px 12px;
+  margin-bottom: 4px;
+  background: var(--bg-primary, #fff);
+  border: 1px solid var(--border-color, #e0e0e0);
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 0.85rem;
+  transition: all 0.15s;
+}
+
+.similar-option:hover:not(:disabled) {
+  border-color: var(--accent, #667eea);
+  background: var(--accent-light, #eef1ff);
+}
+
+.similar-option:disabled {
+  opacity: 0.5;
+  cursor: wait;
+}
+
+.similar-name {
+  font-weight: 600;
+  color: var(--text-primary, #333);
+  flex: 1;
+  text-align: left;
+}
+
+.similar-brand {
+  color: var(--text-muted, #888);
+  font-size: 0.8rem;
+}
+
+.similar-qty {
+  color: var(--text-muted, #888);
+  font-size: 0.8rem;
+  white-space: nowrap;
+}

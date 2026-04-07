@@ -187,3 +187,15 @@
     align-items: stretch;
   }
 }
+
+.sl-group-badge {
+  display: inline-block;
+  background: var(--accent, #667eea);
+  color: #fff;
+  font-size: 0.6rem;
+  font-weight: 700;
+  padding: 2px 6px;
+  border-radius: 8px;
+  margin-left: 6px;
+  vertical-align: middle;
+}
