@@ -710,6 +710,31 @@
   transform: rotate(90deg);
 }
 
+.group-edit-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 1rem;
+  padding: 4px 6px;
+  border-radius: 6px;
+  opacity: 0.5;
+  transition: opacity 0.15s;
+  flex-shrink: 0;
+}
+
+.group-edit-btn:hover {
+  opacity: 1;
+}
+
+.group-edit-form {
+  padding: 16px 20px;
+}
+
+.group-edit-form h3 {
+  margin: 0 0 12px 0;
+  color: var(--text-primary);
+}
+
 .group-card > .item-meta {
   padding: 0 20px 12px;
 }

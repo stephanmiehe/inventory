@@ -37,6 +37,8 @@ function Inventory({ inventory, onRefresh, setInventory }) {
   const [groupingProduct, setGroupingProduct] = useState(null);
   const [groups, setGroups] = useState([]);
   const [newGroupName, setNewGroupName] = useState('');
+  const [editingGroup, setEditingGroup] = useState(null);
+  const [editGroupForm, setEditGroupForm] = useState({ name: '', name_de: '' });
 
   useEffect(() => {
     const timer = setTimeout(() => setDebouncedSearch(search), 200);
@@ -206,6 +208,37 @@ function Inventory({ inventory, onRefresh, setInventory }) {
       loadGroups();
     } catch (error) {
       console.error('Error removing from group:', error);
+    }
+  };
+
+  const startEditingGroup = (g) => {
+    setEditingGroup(g.group_id);
+    setEditGroupForm({ name: g.group_name || '', name_de: g.group_name_de || '' });
+  };
+
+  const handleSaveGroup = async (groupId) => {
+    try {
+      await authFetch('/api/groups/update', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ group_id: groupId, name: editGroupForm.name, name_de: editGroupForm.name_de }),
+      });
+      setEditingGroup(null);
+      onRefresh();
+      loadGroups();
+    } catch (error) {
+      console.error('Error updating group:', error);
+    }
+  };
+
+  const handleDeleteGroup = async (groupId) => {
+    try {
+      await authFetch(`/api/groups/${groupId}`, { method: 'DELETE' });
+      setEditingGroup(null);
+      onRefresh();
+      loadGroups();
+    } catch (error) {
+      console.error('Error deleting group:', error);
     }
   };
 
@@ -385,31 +418,55 @@ function Inventory({ inventory, onRefresh, setInventory }) {
               <LazyItem key={`group-${g.group_id}`}>
                 <div className={`inventory-item group-card${isLow ? ' low-stock' : ''}`}>
                   {isLow && <span className="low-stock-badge">Nachkaufen</span>}
-                  <div className="group-header" onClick={() => toggleGroup(g.group_id)}>
-                    {imageUrl && (
-                      <div className="group-thumb" onClick={(e) => { e.stopPropagation(); setZoomImage({ url: imageUrl, name: g.group_name_de || g.group_name }); }}>
-                        <img src={imageUrl} alt={g.group_name} loading="lazy" />
+
+                  {editingGroup === g.group_id ? (
+                    <div className="group-edit-form">
+                      <h3>Gruppe bearbeiten</h3>
+                      <div className="edit-field">
+                        <label>Name</label>
+                        <input className="edit-input" value={editGroupForm.name} onChange={(e) => setEditGroupForm(prev => ({ ...prev, name: e.target.value }))} />
                       </div>
-                    )}
-                    <div className="group-info">
-                      <h3>{g.group_name_de || g.group_name} <span className="group-badge">{g.members.length} Varianten</span></h3>
-                    </div>
-                    <span className={`group-toggle ${expanded ? 'expanded' : ''}`}>▶</span>
-                  </div>
-                  <div className="item-meta">
-                    <div className="qty-row">
-                      <span className="qty-label">Ist (gesamt)</span>
-                      <span className="qty-display">{g.totalQuantity}</span>
-                    </div>
-                    <div className="qty-row">
-                      <span className="qty-label">Soll</span>
-                      <div className="qty-inline soll">
-                        <button className="qty-btn-sm" onClick={() => handleSetGroupIdealStock(g.group_id, g.group_ideal_stock - 1)} disabled={g.group_ideal_stock <= 0}>−</button>
-                        <span className={`qty-display ${isLow ? 'low' : ''}`}>{g.group_ideal_stock}</span>
-                        <button className="qty-btn-sm" onClick={() => handleSetGroupIdealStock(g.group_id, g.group_ideal_stock + 1)}>+</button>
+                      <div className="edit-field">
+                        <label>Name (DE)</label>
+                        <input className="edit-input" value={editGroupForm.name_de} onChange={(e) => setEditGroupForm(prev => ({ ...prev, name_de: e.target.value }))} />
+                      </div>
+                      <div className="edit-actions">
+                        <button className="save-btn" onClick={() => handleSaveGroup(g.group_id)}>Speichern</button>
+                        <button className="cancel-btn-sm" onClick={() => setEditingGroup(null)}>Abbrechen</button>
+                        <button className="delete-btn" onClick={() => handleDeleteGroup(g.group_id)} style={{ marginLeft: 'auto' }}>🗑️ Gruppe auflösen</button>
                       </div>
                     </div>
-                  </div>
+                  ) : (
+                    <>
+                      <div className="group-header" onClick={() => toggleGroup(g.group_id)}>
+                        {imageUrl && (
+                          <div className="group-thumb" onClick={(e) => { e.stopPropagation(); setZoomImage({ url: imageUrl, name: g.group_name_de || g.group_name }); }}>
+                            <img src={imageUrl} alt={g.group_name} loading="lazy" />
+                          </div>
+                        )}
+                        <div className="group-info">
+                          <h3>{g.group_name_de || g.group_name} <span className="group-badge">{g.members.length} Varianten</span></h3>
+                        </div>
+                        <button className="group-edit-btn" onClick={(e) => { e.stopPropagation(); startEditingGroup(g); }} title="Gruppe bearbeiten">✏️</button>
+                        <span className={`group-toggle ${expanded ? 'expanded' : ''}`}>▶</span>
+                      </div>
+                      <div className="item-meta">
+                        <div className="qty-row">
+                          <span className="qty-label">Ist (gesamt)</span>
+                          <span className="qty-display">{g.totalQuantity}</span>
+                        </div>
+                        <div className="qty-row">
+                          <span className="qty-label">Soll</span>
+                          <div className="qty-inline soll">
+                            <button className="qty-btn-sm" onClick={() => handleSetGroupIdealStock(g.group_id, g.group_ideal_stock - 1)} disabled={g.group_ideal_stock <= 0}>−</button>
+                            <span className={`qty-display ${isLow ? 'low' : ''}`}>{g.group_ideal_stock}</span>
+                            <button className="qty-btn-sm" onClick={() => handleSetGroupIdealStock(g.group_id, g.group_ideal_stock + 1)}>+</button>
+                          </div>
+                        </div>
+                      </div>
+                    </>
+                  )}
+
                   {expanded && (
                     <div className="group-members">
                       {g.members.map(member => (
