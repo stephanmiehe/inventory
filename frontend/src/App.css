@@ -112,6 +112,37 @@
   line-height: 1;
 }
 
+.update-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 20px;
+  background: var(--accent-gradient);
+  color: #fff;
+  border-radius: 8px;
+  margin-bottom: 12px;
+  cursor: pointer;
+  animation: slideIn 0.3s ease;
+  font-size: 0.9rem;
+  font-weight: 500;
+}
+
+.update-btn {
+  background: rgba(255, 255, 255, 0.25);
+  color: #fff;
+  border: 1px solid rgba(255, 255, 255, 0.4);
+  padding: 6px 14px;
+  border-radius: 6px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.update-btn:hover {
+  background: rgba(255, 255, 255, 0.4);
+}
+
 .message {
   padding: 15px 20px;
   border-radius: 8px;

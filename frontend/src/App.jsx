@@ -70,6 +70,7 @@ function App() {
   const [showModal, setShowModal] = useState(false);
   const [showEditForm, setShowEditForm] = useState(false);
   const [showScanOutModal, setShowScanOutModal] = useState(false);
+  const [updateAvailable, setUpdateAvailable] = useState(false);
   const [scannedProduct, setScannedProduct] = useState(null);
   const [scannedBarcode, setScannedBarcode] = useState(null);
   const [scanOutMaxQty, setScanOutMaxQty] = useState(1);
@@ -86,6 +87,21 @@ function App() {
     document.documentElement.setAttribute('data-theme', darkMode ? 'dark' : 'light');
     localStorage.setItem('darkMode', darkMode);
   }, [darkMode]);
+
+  // Listen for service worker update
+  useEffect(() => {
+    const onUpdate = () => setUpdateAvailable(true);
+    window.addEventListener('sw-update-available', onUpdate);
+    return () => window.removeEventListener('sw-update-available', onUpdate);
+  }, []);
+
+  const handleUpdate = () => {
+    navigator.serviceWorker?.getRegistration().then((reg) => {
+      if (reg?.waiting) {
+        reg.waiting.postMessage({ type: 'SKIP_WAITING' });
+      }
+    });
+  };
 
   // Auto-dismiss messages after 4 seconds
   useEffect(() => {
@@ -343,6 +359,13 @@ function App() {
           {darkMode ? '☀️' : '🌙'}
         </button>
       </header>
+
+      {updateAvailable && (
+        <div className="update-banner" onClick={handleUpdate}>
+          <span>🔄 Neue Version verfügbar</span>
+          <button className="update-btn">Jetzt aktualisieren</button>
+        </div>
+      )}
 
       {message && (
         <div className={`message ${message.type}`}>
