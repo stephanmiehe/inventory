@@ -293,44 +293,22 @@ function App() {
     return <LoginScreen onLogin={() => setAuthenticated(true)} />;
   }
 
+  const inventoryCount = inventory.reduce((sum, item) => sum + item.quantity, 0);
+  const shoppingCount = inventory.filter(item => item.ideal_stock > 0 && item.quantity < item.ideal_stock).length;
+
   return (
     <div className="app">
-      <header className="header">
-        <div className="header-top">
-          <h1>🛒 Vorratsverwaltung</h1>
-          <button className="dark-mode-toggle" onClick={() => setDarkMode(d => !d)} title={darkMode ? 'Hellmodus' : 'Dunkelmodus'}>
-            {darkMode ? '☀️' : '🌙'}
-          </button>
-        </div>
-        <p>Artikel beim Einkauf einscannen, beim Verbrauch ausscannen</p>
+      <header className="app-bar">
+        <h1>
+          {activeTab === 'scan-in' && 'Einscannen'}
+          {activeTab === 'scan-out' && 'Ausscannen'}
+          {activeTab === 'inventory' && 'Bestand'}
+          {activeTab === 'shopping' && 'Einkaufsliste'}
+        </h1>
+        <button className="dark-mode-toggle" onClick={() => setDarkMode(d => !d)} title={darkMode ? 'Hellmodus' : 'Dunkelmodus'}>
+          {darkMode ? '☀️' : '🌙'}
+        </button>
       </header>
-
-      <div className="tabs">
-        <button
-          className={`tab ${activeTab === 'scan-in' ? 'active' : ''}`}
-          onClick={() => setActiveTab('scan-in')}
-        >
-          Einscannen
-        </button>
-        <button
-          className={`tab ${activeTab === 'scan-out' ? 'active' : ''}`}
-          onClick={() => setActiveTab('scan-out')}
-        >
-          Ausscannen
-        </button>
-        <button
-          className={`tab ${activeTab === 'inventory' ? 'active' : ''}`}
-          onClick={() => { setActiveTab('inventory'); loadInventory(); }}
-        >
-          Bestand ({inventory.reduce((sum, item) => sum + item.quantity, 0)})
-        </button>
-        <button
-          className={`tab ${activeTab === 'shopping' ? 'active' : ''}`}
-          onClick={() => setActiveTab('shopping')}
-        >
-          Einkaufsliste ({inventory.filter(item => item.ideal_stock > 0 && item.quantity < item.ideal_stock).length})
-        </button>
-      </div>
 
       {message && (
         <div className={`message ${message.type}`}>
@@ -341,8 +319,7 @@ function App() {
       <div className="content">
         {activeTab === 'scan-in' && (
           <div className="scanner-container">
-            <h2>Artikel einscannen</h2>
-            <p className="instruction">Scannen Sie den Barcode eines gekauften Artikels</p>
+            <p className="instruction">Barcode eines gekauften Artikels scannen</p>
             {loading && <div className="loading-indicator">Produkt wird gesucht…</div>}
             <BarcodeScanner
               onScan={(barcode) => handleScan(barcode, 'in')}
@@ -353,8 +330,7 @@ function App() {
 
         {activeTab === 'scan-out' && (
           <div className="scanner-container">
-            <h2>Artikel ausscannen</h2>
-            <p className="instruction">Scannen Sie den Barcode eines verbrauchten Artikels</p>
+            <p className="instruction">Barcode eines verbrauchten Artikels scannen</p>
             {loading && <div className="loading-indicator">Produkt wird gesucht…</div>}
             <BarcodeScanner
               onScan={(barcode) => handleScan(barcode, 'out')}
@@ -376,6 +352,44 @@ function App() {
           <ShoppingList refreshKey={activeTab === 'shopping' ? Date.now() : 0} />
         )}
       </div>
+
+      <nav className="bottom-nav">
+        <button className={`nav-item ${activeTab === 'scan-in' ? 'active' : ''}`} onClick={() => setActiveTab('scan-in')}>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M3 7V5a2 2 0 012-2h2M17 3h2a2 2 0 012 2v2M21 17v2a2 2 0 01-2 2h-2M7 21H5a2 2 0 01-2-2v-2"/>
+            <line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/>
+          </svg>
+          <span>Einscannen</span>
+        </button>
+        <button className={`nav-item ${activeTab === 'scan-out' ? 'active' : ''}`} onClick={() => setActiveTab('scan-out')}>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M3 7V5a2 2 0 012-2h2M17 3h2a2 2 0 012 2v2M21 17v2a2 2 0 01-2 2h-2M7 21H5a2 2 0 01-2-2v-2"/>
+            <line x1="8" y1="12" x2="16" y2="12"/>
+          </svg>
+          <span>Ausscannen</span>
+        </button>
+        <button className={`nav-item ${activeTab === 'inventory' ? 'active' : ''}`} onClick={() => { setActiveTab('inventory'); loadInventory(); }}>
+          <div className="nav-icon-wrapper">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z"/>
+              <polyline points="3.27 6.96 12 12.01 20.73 6.96"/>
+              <line x1="12" y1="22.08" x2="12" y2="12"/>
+            </svg>
+            {inventoryCount > 0 && <span className="nav-badge">{inventoryCount}</span>}
+          </div>
+          <span>Bestand</span>
+        </button>
+        <button className={`nav-item ${activeTab === 'shopping' ? 'active' : ''}`} onClick={() => setActiveTab('shopping')}>
+          <div className="nav-icon-wrapper">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/>
+              <path d="M1 1h4l2.68 13.39a2 2 0 002 1.61h9.72a2 2 0 002-1.61L23 6H6"/>
+            </svg>
+            {shoppingCount > 0 && <span className="nav-badge">{shoppingCount}</span>}
+          </div>
+          <span>Einkaufsliste</span>
+        </button>
+      </nav>
 
       {showModal && scannedProduct && (
         <ProductModal
