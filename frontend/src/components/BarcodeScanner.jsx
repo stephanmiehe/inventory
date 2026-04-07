@@ -8,22 +8,13 @@ function BarcodeScanner({ onScan, disabled }) {
   const [manualBarcode, setManualBarcode] = useState('');
   const [error, setError] = useState(null);
   const [scanning, setScanning] = useState(false);
+  const [inputActive, setInputActive] = useState(false);
   const videoRef = useRef(null);
   const streamRef = useRef(null);
   const detectorRef = useRef(null);
   const rafRef = useRef(null);
   const scannedRef = useRef(false);
   const inputRef = useRef(null);
-
-  // Prevent barcode input from auto-focusing and opening keyboard on mobile
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      if (inputRef.current && document.activeElement === inputRef.current) {
-        inputRef.current.blur();
-      }
-    }, 100);
-    return () => clearTimeout(timer);
-  }, []);
 
   useEffect(() => {
     if (disabled) return;
@@ -106,6 +97,8 @@ function BarcodeScanner({ onScan, disabled }) {
             type="text"
             value={manualBarcode}
             onChange={(e) => setManualBarcode(e.target.value)}
+            onFocus={() => setInputActive(true)}
+            readOnly={!inputActive}
             placeholder="Barcode manuell eingeben"
             disabled={disabled}
             className="barcode-input"
