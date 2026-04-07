@@ -23,6 +23,27 @@
   color: var(--text-primary);
 }
 
+.admin-link {
+  position: absolute;
+  right: 48px;
+  background: none;
+  border: none;
+  font-size: 1.1rem;
+  cursor: pointer;
+  padding: 6px;
+  border-radius: 50%;
+  transition: background 0.2s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0.5;
+}
+
+.admin-link:hover {
+  background: var(--bg-secondary);
+  opacity: 1;
+}
+
 .dark-mode-toggle {
   position: absolute;
   right: 16px;

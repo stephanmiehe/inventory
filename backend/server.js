@@ -65,6 +65,21 @@ db.exec(`
   );
 `);
 
+// --- Audit Log ---
+db.exec(`
+  CREATE TABLE IF NOT EXISTS audit_log (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    action TEXT NOT NULL,
+    details TEXT,
+    product_name TEXT,
+    barcode TEXT,
+    device TEXT,
+    ip TEXT,
+    created_at TEXT DEFAULT (datetime('now'))
+  );
+  CREATE INDEX IF NOT EXISTS idx_audit_created ON audit_log(created_at);
+`);
+
 // Add group_id column if missing
 try {
   db.prepare("SELECT group_id FROM products LIMIT 0").get();
@@ -158,6 +173,37 @@ app.get('/api/auth/status', (req, res) => {
 // Apply auth to all API routes except login/status
 app.use('/api/', authMiddleware);
 app.use('/uploads', authMiddleware);
+
+// --- Audit Logging ---
+const insertAuditLog = db.prepare(
+  'INSERT INTO audit_log (action, details, product_name, barcode, device, ip) VALUES (?, ?, ?, ?, ?, ?)'
+);
+
+function parseDevice(req) {
+  const ua = req.headers['user-agent'] || '';
+  const deviceName = req.headers['x-device-name'] || '';
+  if (deviceName) return deviceName;
+  if (/iPhone/.test(ua)) return 'iPhone';
+  if (/iPad/.test(ua)) return 'iPad';
+  if (/Android/.test(ua)) {
+    const m = ua.match(/Android[^;]*;\s*([^)]+)\)/);
+    return m ? m[1].trim() : 'Android';
+  }
+  if (/Macintosh/.test(ua)) return 'Mac';
+  if (/Windows/.test(ua)) return 'Windows PC';
+  if (/Linux/.test(ua)) return 'Linux';
+  return ua.substring(0, 50) || 'Unbekannt';
+}
+
+function logAction(req, action, details, productName, barcode) {
+  try {
+    const device = parseDevice(req);
+    const ip = (req.headers['x-real-ip'] || req.ip || '').replace(/^::ffff:/, '');
+    insertAuditLog.run(action, details || null, productName || null, barcode || null, device, ip);
+  } catch (e) {
+    console.error('Audit log error:', e);
+  }
+}
 
 // Serve uploaded images
 const UPLOADS_DIR = 'uploads';
@@ -564,6 +610,7 @@ app.post('/api/products/update', async (req, res) => {
     
     product = stmts.getProduct.get(barcode);
     res.json(product);
+    logAction(req, 'Produkt bearbeitet', `Name: ${name}`, product.name_de || name, barcode);
     broadcastChange();
   } catch (error) {
     console.error('Error updating product:', error);
@@ -613,6 +660,7 @@ app.post('/api/inventory/scan-in', async (req, res) => {
     insertMany(count);
     
     res.json({ message: `${count} Artikel eingebucht`, product, quantity: count });
+    logAction(req, 'Eingebucht', `${count}× eingebucht`, product.name_de || product.name, barcode);
     broadcastChange();
   } catch (error) {
     console.error('Error scanning in item:', error);
@@ -654,6 +702,7 @@ app.post('/api/inventory/scan-out', async (req, res) => {
     removeMany(activeItems);
     
     res.json({ message: `${toRemove} Artikel ausgebucht`, product, quantity: toRemove });
+    logAction(req, 'Ausgebucht', `${toRemove}× ausgebucht`, product.name_de || product.name, barcode);
     broadcastChange();
   } catch (error) {
     console.error('Error scanning out item:', error);
@@ -693,6 +742,7 @@ app.delete('/api/inventory/:barcode', (req, res) => {
     deleteAll();
 
     res.json({ message: `${product.name} entfernt` });
+    logAction(req, 'Produkt gelöscht', `${product.name_de || product.name} komplett entfernt`, product.name_de || product.name, barcode);
     broadcastChange();
   } catch (error) {
     console.error('Error deleting inventory item:', error);
@@ -735,6 +785,7 @@ app.post('/api/inventory/set-quantity', (req, res) => {
     adjustQty();
 
     res.json({ message: `Menge auf ${newQty} gesetzt`, product, quantity: newQty });
+    logAction(req, 'Menge geändert', `${currentQty} → ${newQty}`, product.name_de || product.name, barcode);
     broadcastChange();
   } catch (error) {
     console.error('Error setting quantity:', error);
@@ -757,10 +808,12 @@ app.post('/api/products/set-ideal-stock', (req, res) => {
       return res.status(404).json({ error: 'Produkt nicht gefunden' });
     }
 
+    const oldIdeal = product.ideal_stock || 0;
     const newIdeal = Math.max(0, Math.floor(Number(ideal_stock)));
     stmts.setIdealStock.run(newIdeal, barcode);
 
     res.json({ message: 'Soll-Bestand aktualisiert', product: stmts.getProduct.get(barcode) });
+    logAction(req, 'Soll geändert', `${oldIdeal} → ${newIdeal}`, product.name_de || product.name, barcode);
     broadcastChange();
   } catch (error) {
     console.error('Error setting ideal stock:', error);
@@ -880,6 +933,7 @@ app.post('/api/groups/create', (req, res) => {
 
     const group = db.prepare('SELECT * FROM product_groups WHERE id = ?').get(groupId);
     res.json(group);
+    logAction(req, 'Gruppe erstellt', `Gruppe "${name_de || name}"`, null, null);
     broadcastChange();
   } catch (error) {
     console.error('Error creating group:', error);
@@ -905,6 +959,7 @@ app.post('/api/groups/add-product', (req, res) => {
 
     db.prepare('UPDATE products SET group_id = ? WHERE barcode = ?').run(groupId, barcode);
     res.json({ message: 'Produkt zur Gruppe hinzugefügt' });
+    logAction(req, 'Zu Gruppe hinzugefügt', `"${product.name_de || product.name}" → Gruppe "${group.name_de || group.name}"`, product.name_de || product.name, barcode);
     broadcastChange();
   } catch (error) {
     console.error('Error adding product to group:', error);
@@ -921,8 +976,10 @@ app.post('/api/groups/remove-product', (req, res) => {
   }
 
   try {
+    const product = stmts.getProduct.get(barcode);
     db.prepare('UPDATE products SET group_id = NULL WHERE barcode = ?').run(barcode);
     res.json({ message: 'Produkt aus Gruppe entfernt' });
+    logAction(req, 'Aus Gruppe entfernt', `"${product?.name_de || product?.name || barcode}"`, product?.name_de || product?.name, barcode);
     broadcastChange();
   } catch (error) {
     console.error('Error removing product from group:', error);
@@ -950,6 +1007,7 @@ app.post('/api/groups/update', (req, res) => {
       .run(name, name_de, image_url, ideal_stock, groupId);
 
     res.json(db.prepare('SELECT * FROM product_groups WHERE id = ?').get(groupId));
+    logAction(req, 'Gruppe bearbeitet', `Gruppe "${name_de || name}"`, null, null);
     broadcastChange();
   } catch (error) {
     console.error('Error updating group:', error);
@@ -963,12 +1021,14 @@ app.delete('/api/groups/:id', (req, res) => {
   if (!groupId) return res.status(400).json({ error: 'Ungültige Gruppen-ID' });
 
   try {
+    const group = db.prepare('SELECT * FROM product_groups WHERE id = ?').get(groupId);
     const deleteGroup = db.transaction(() => {
       db.prepare('UPDATE products SET group_id = NULL WHERE group_id = ?').run(groupId);
       db.prepare('DELETE FROM product_groups WHERE id = ?').run(groupId);
     });
     deleteGroup();
     res.json({ message: 'Gruppe gelöscht' });
+    logAction(req, 'Gruppe gelöscht', `Gruppe "${group?.name_de || group?.name || groupId}"`, null, null);
     broadcastChange();
   } catch (error) {
     console.error('Error deleting group:', error);
@@ -1045,6 +1105,25 @@ app.get('/api/products/similar', (req, res) => {
     res.json(matches);
   } catch (error) {
     console.error('Error finding similar products:', error);
+    res.status(500).json({ error: 'Interner Serverfehler' });
+  }
+});
+
+// --- Admin: Audit Log ---
+app.get('/api/admin/audit-log', (req, res) => {
+  try {
+    const page = Math.max(1, Math.floor(Number(req.query.page) || 1));
+    const limit = Math.min(100, Math.max(10, Math.floor(Number(req.query.limit) || 50)));
+    const offset = (page - 1) * limit;
+
+    const total = db.prepare('SELECT COUNT(*) as count FROM audit_log').get().count;
+    const logs = db.prepare(
+      'SELECT * FROM audit_log ORDER BY created_at DESC LIMIT ? OFFSET ?'
+    ).all(limit, offset);
+
+    res.json({ logs, total, page, limit, pages: Math.ceil(total / limit) });
+  } catch (error) {
+    console.error('Error fetching audit log:', error);
     res.status(500).json({ error: 'Interner Serverfehler' });
   }
 });

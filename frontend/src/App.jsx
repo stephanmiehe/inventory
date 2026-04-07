@@ -4,6 +4,7 @@ import Inventory from './components/Inventory';
 import ShoppingList from './components/ShoppingList';
 import StoreSelector from './components/StoreSelector';
 import { ProductModal, ProductEditForm, ScanOutModal } from './components/ProductModal';
+import Admin from './components/Admin';
 import { authFetch } from './authFetch';
 import './App.css';
 
@@ -64,6 +65,7 @@ function App() {
   const [authenticated, setAuthenticated] = useState(null);
   const [inventory, setInventory] = useState([]);
   const [activeTab, setActiveTab] = useState('scan-in');
+  const [showAdmin, setShowAdmin] = useState(() => window.location.pathname === '/admin');
   const [message, setMessage] = useState(null);
   const [loading, setLoading] = useState(false);
   const [inventoryError, setInventoryError] = useState(null);
@@ -93,6 +95,15 @@ function App() {
     const onUpdate = () => setUpdateAvailable(true);
     window.addEventListener('sw-update-available', onUpdate);
     return () => window.removeEventListener('sw-update-available', onUpdate);
+  }, []);
+
+  // Handle browser back button for admin page
+  useEffect(() => {
+    const onPopState = () => {
+      setShowAdmin(window.location.pathname === '/admin');
+    };
+    window.addEventListener('popstate', onPopState);
+    return () => window.removeEventListener('popstate', onPopState);
   }, []);
 
   const handleUpdate = () => {
@@ -343,6 +354,14 @@ function App() {
     return <LoginScreen onLogin={() => setAuthenticated(true)} />;
   }
 
+  if (showAdmin) {
+    return (
+      <div className="app">
+        <Admin onBack={() => { setShowAdmin(false); window.history.pushState({}, '', '/'); }} />
+      </div>
+    );
+  }
+
   const inventoryCount = inventory.reduce((sum, item) => sum + item.quantity, 0);
   const shoppingCount = inventory.filter(item => item.ideal_stock > 0 && item.quantity < item.ideal_stock).length;
 
@@ -355,6 +374,9 @@ function App() {
           {activeTab === 'inventory' && 'Bestand'}
           {activeTab === 'shopping' && 'Einkaufsliste'}
         </h1>
+        <button className="admin-link" onClick={() => { setShowAdmin(true); window.history.pushState({}, '', '/admin'); }} title="Admin">
+          ⚙️
+        </button>
         <button className="dark-mode-toggle" onClick={() => setDarkMode(d => !d)} title={darkMode ? 'Hellmodus' : 'Dunkelmodus'}>
           {darkMode ? '☀️' : '🌙'}
         </button>
