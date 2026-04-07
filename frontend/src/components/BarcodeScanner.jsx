@@ -17,9 +17,12 @@ function BarcodeScanner({ onScan, disabled }) {
 
   // Prevent barcode input from auto-focusing and opening keyboard on mobile
   useEffect(() => {
-    if (inputRef.current && document.activeElement === inputRef.current) {
-      inputRef.current.blur();
-    }
+    const timer = setTimeout(() => {
+      if (inputRef.current && document.activeElement === inputRef.current) {
+        inputRef.current.blur();
+      }
+    }, 100);
+    return () => clearTimeout(timer);
   }, []);
 
   useEffect(() => {
