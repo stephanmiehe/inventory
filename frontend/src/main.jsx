@@ -8,8 +8,8 @@ function registerSW() {
   if (!('serviceWorker' in navigator)) return;
 
   navigator.serviceWorker.register('/sw.js').then((reg) => {
-    // Check for updates every 5 minutes
-    setInterval(() => reg.update(), 5 * 60 * 1000);
+    // Check for updates every 30 seconds
+    setInterval(() => reg.update(), 30 * 1000);
 
     reg.addEventListener('updatefound', () => {
       const newWorker = reg.installing;
