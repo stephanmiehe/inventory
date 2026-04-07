@@ -435,6 +435,27 @@ const stmts = {
   `),
 };
 
+// --- SSE for real-time multi-user sync ---
+const sseClients = new Set();
+
+app.get('/api/events', (req, res) => {
+  res.writeHead(200, {
+    'Content-Type': 'text/event-stream',
+    'Cache-Control': 'no-cache',
+    Connection: 'keep-alive',
+  });
+  res.write('\n');
+  sseClients.add(res);
+  req.on('close', () => sseClients.delete(res));
+});
+
+function broadcastChange() {
+  const data = `data: ${JSON.stringify({ type: 'inventory-changed', ts: Date.now() })}\n\n`;
+  for (const client of sseClients) {
+    client.write(data);
+  }
+}
+
 // --- API Routes ---
 
 // Product lookup
@@ -511,6 +532,7 @@ app.post('/api/products/update', async (req, res) => {
     
     product = stmts.getProduct.get(barcode);
     res.json(product);
+    broadcastChange();
   } catch (error) {
     console.error('Error updating product:', error);
     res.status(500).json({ error: 'Interner Serverfehler' });
@@ -553,6 +575,7 @@ app.post('/api/inventory/scan-in', async (req, res) => {
     insertMany(count);
     
     res.json({ message: `${count} Artikel eingebucht`, product, quantity: count });
+    broadcastChange();
   } catch (error) {
     console.error('Error scanning in item:', error);
     res.status(500).json({ error: 'Interner Serverfehler' });
@@ -593,6 +616,7 @@ app.post('/api/inventory/scan-out', async (req, res) => {
     removeMany(activeItems);
     
     res.json({ message: `${toRemove} Artikel ausgebucht`, product, quantity: toRemove });
+    broadcastChange();
   } catch (error) {
     console.error('Error scanning out item:', error);
     res.status(500).json({ error: 'Interner Serverfehler' });
@@ -631,6 +655,7 @@ app.delete('/api/inventory/:barcode', (req, res) => {
     deleteAll();
 
     res.json({ message: `${product.name} entfernt` });
+    broadcastChange();
   } catch (error) {
     console.error('Error deleting inventory item:', error);
     res.status(500).json({ error: 'Interner Serverfehler' });
@@ -672,6 +697,7 @@ app.post('/api/inventory/set-quantity', (req, res) => {
     adjustQty();
 
     res.json({ message: `Menge auf ${newQty} gesetzt`, product, quantity: newQty });
+    broadcastChange();
   } catch (error) {
     console.error('Error setting quantity:', error);
     res.status(500).json({ error: 'Interner Serverfehler' });
@@ -697,6 +723,7 @@ app.post('/api/products/set-ideal-stock', (req, res) => {
     stmts.setIdealStock.run(newIdeal, barcode);
 
     res.json({ message: 'Soll-Bestand aktualisiert', product: stmts.getProduct.get(barcode) });
+    broadcastChange();
   } catch (error) {
     console.error('Error setting ideal stock:', error);
     res.status(500).json({ error: 'Interner Serverfehler' });

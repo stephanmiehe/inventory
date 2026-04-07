@@ -108,9 +108,21 @@ function App() {
   useEffect(() => {
     if (authenticated !== true) return;
     loadInventory();
-    // Auto-refresh every 30 seconds for multi-user support
-    const interval = setInterval(loadInventory, 30000);
-    return () => clearInterval(interval);
+
+    // SSE: real-time updates from other users
+    const evtSource = new EventSource('/api/events');
+    evtSource.onmessage = () => loadInventory();
+
+    // Refresh when app returns to foreground
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') loadInventory();
+    };
+    document.addEventListener('visibilitychange', onVisible);
+
+    return () => {
+      evtSource.close();
+      document.removeEventListener('visibilitychange', onVisible);
+    };
   }, [authenticated]);
 
   const handleScan = async (barcode, action) => {
