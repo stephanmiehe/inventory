@@ -7,20 +7,50 @@ const STORES = [
   { id: '', label: 'Andere', color: '#888', accent: '#fff' },
 ];
 
-function StoreSelector({ selected, onSelect }) {
+function parseStores(value) {
+  if (!value) return [];
+  return value.split(',').map(s => s.trim()).filter(Boolean);
+}
+
+function StoreSelector({ selected, onSelect, multi = false }) {
+  const selectedSet = multi ? new Set(parseStores(selected)) : null;
+
+  const handleClick = (storeId) => {
+    if (!multi) {
+      onSelect(storeId);
+      return;
+    }
+    const next = new Set(selectedSet);
+    if (storeId === '') {
+      // "Andere" toggles: if selected, remove it; if not, add it
+      next.has('') ? next.delete('') : next.add('');
+    } else if (next.has(storeId)) {
+      next.delete(storeId);
+    } else {
+      next.add(storeId);
+    }
+    onSelect([...next].join(','));
+  };
+
+  const isActive = (storeId) => {
+    if (multi) return selectedSet.has(storeId);
+    return selected === storeId;
+  };
+
   return (
     <div className="store-selector">
-      <p className="store-label">Einkauf bei:</p>
+      <p className="store-label">{multi ? 'Erhältlich bei:' : 'Einkauf bei:'}</p>
       <div className="store-options">
         {STORES.map((store) => (
           <button
             key={store.id}
-            className={`store-chip ${selected === store.id ? 'active' : ''}`}
-            onClick={() => onSelect(store.id)}
+            className={`store-chip ${isActive(store.id) ? 'active' : ''}`}
+            onClick={() => handleClick(store.id)}
             style={{
               '--store-color': store.color,
               '--store-accent': store.accent,
             }}
+            type="button"
           >
             <span className="store-icon" style={{ background: store.color, color: store.accent }}>
               {store.id === 'lidl' && 'L'}
@@ -36,5 +66,5 @@ function StoreSelector({ selected, onSelect }) {
   );
 }
 
-export { STORES };
+export { STORES, parseStores };
 export default StoreSelector;

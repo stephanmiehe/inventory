@@ -576,7 +576,10 @@ app.post('/api/inventory/scan-in', async (req, res) => {
       );
       product = stmts.getProduct.get(barcode);
     } else if (store) {
-      db.prepare('UPDATE products SET store = ? WHERE barcode = ?').run(store, barcode);
+      // Merge store into existing comma-separated list
+      const existing = new Set((product.store || '').split(',').map(s => s.trim()).filter(Boolean));
+      existing.add(store);
+      db.prepare('UPDATE products SET store = ? WHERE barcode = ?').run([...existing].join(','), barcode);
     }
     
     const insertMany = db.transaction((count) => {

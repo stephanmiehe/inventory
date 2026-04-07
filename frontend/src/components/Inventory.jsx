@@ -179,6 +179,7 @@ function Inventory({ inventory, onRefresh, setInventory }) {
                   <StoreSelector
                     selected={editForm.store}
                     onSelect={(store) => setEditForm(prev => ({ ...prev, store }))}
+                    multi
                   />
                 </div>
                 <div className="edit-actions">

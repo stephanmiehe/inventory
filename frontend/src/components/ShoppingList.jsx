@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { authFetch } from '../authFetch';
-import { STORES } from './StoreSelector';
+import { STORES, parseStores } from './StoreSelector';
 import './ShoppingList.css';
 
 const STORE_ORDER = ['lidl', 'mercadona', 'hiperdino', ''];
@@ -78,12 +78,19 @@ function ShoppingList({ refreshKey }) {
     }
   };
 
-  // Group items by store
+  // Group items by store (items with multiple stores appear in each group)
   const grouped = {};
   for (const item of items) {
-    const key = STORE_ORDER.includes(item.store) ? item.store : '';
-    if (!grouped[key]) grouped[key] = [];
-    grouped[key].push(item);
+    const stores = parseStores(item.store);
+    const keys = stores.length > 0 ? stores : [''];
+    for (const key of keys) {
+      const normalizedKey = STORE_ORDER.includes(key) ? key : '';
+      if (!grouped[normalizedKey]) grouped[normalizedKey] = [];
+      // Avoid duplicates if both '' and an unknown store map to ''
+      if (!grouped[normalizedKey].some(i => i.barcode === item.barcode)) {
+        grouped[normalizedKey].push(item);
+      }
+    }
   }
 
   // Sort groups in defined order
