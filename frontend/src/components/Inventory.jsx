@@ -111,11 +111,9 @@ function Inventory({ inventory, onRefresh, setInventory }) {
     return () => window.removeEventListener('scroll', onScroll);
   }, []);
 
-  // Auto-focus search only on non-touch devices to avoid opening keyboard on phones
+  // Auto-focus search when inventory tab is shown
   useEffect(() => {
-    if (!window.matchMedia('(pointer: coarse)').matches) {
-      searchInputRef.current?.focus();
-    }
+    searchInputRef.current?.focus({ preventScroll: true });
   }, []);
 
   const loadGroups = async () => {

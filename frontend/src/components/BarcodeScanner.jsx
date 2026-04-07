@@ -13,6 +13,14 @@ function BarcodeScanner({ onScan, disabled }) {
   const detectorRef = useRef(null);
   const rafRef = useRef(null);
   const scannedRef = useRef(false);
+  const inputRef = useRef(null);
+
+  // Prevent barcode input from auto-focusing and opening keyboard on mobile
+  useEffect(() => {
+    if (inputRef.current && document.activeElement === inputRef.current) {
+      inputRef.current.blur();
+    }
+  }, []);
 
   useEffect(() => {
     if (disabled) return;
@@ -91,6 +99,7 @@ function BarcodeScanner({ onScan, disabled }) {
         <p className="or-divider">ODER</p>
         <form onSubmit={handleManualSubmit}>
           <input
+            ref={inputRef}
             type="text"
             value={manualBarcode}
             onChange={(e) => setManualBarcode(e.target.value)}
