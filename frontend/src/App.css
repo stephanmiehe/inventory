@@ -276,8 +276,9 @@
 .login-error {
   margin-top: 12px;
   padding: 10px;
-  background: #ffeaea;
-  color: #d32f2f;
+  background: var(--error);
+  color: var(--error-text);
+  border: 1px solid var(--error-border);
   border-radius: 8px;
   font-size: 0.9rem;
 }

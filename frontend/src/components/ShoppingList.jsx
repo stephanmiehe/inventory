@@ -121,7 +121,7 @@ function ShoppingList({ refreshKey }) {
               <div key={item.id} className="sl-item">
                 {item.image_url && (
                   <div className="sl-item-image" onClick={() => setZoomImage({ url: item.image_url, name: item.name_de || item.name })}>
-                    <img src={item.image_url} alt={item.name} />
+                    <img src={item.image_url} alt={item.name} loading="lazy" />
                   </div>
                 )}
                 <div className="sl-item-details">

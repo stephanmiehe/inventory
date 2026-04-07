@@ -87,6 +87,13 @@ function App() {
     localStorage.setItem('darkMode', darkMode);
   }, [darkMode]);
 
+  // Auto-dismiss messages after 4 seconds
+  useEffect(() => {
+    if (!message) return;
+    const timer = setTimeout(() => setMessage(null), 4000);
+    return () => clearTimeout(timer);
+  }, [message]);
+
   // Check auth status on mount
   useEffect(() => {
     authFetch('/api/auth/status')
@@ -113,9 +120,19 @@ function App() {
     if (authenticated !== true) return;
     loadInventory();
 
-    // SSE: real-time updates from other users
-    const evtSource = new EventSource('/api/events');
-    evtSource.onmessage = () => loadInventory();
+    // SSE: real-time updates from other users (with auto-reconnect)
+    let evtSource;
+    let reconnectTimer;
+
+    function connectSSE() {
+      evtSource = new EventSource('/api/events');
+      evtSource.onmessage = () => loadInventory();
+      evtSource.onerror = () => {
+        evtSource.close();
+        reconnectTimer = setTimeout(connectSSE, 5000);
+      };
+    }
+    connectSSE();
 
     // Refresh when app returns to foreground
     const onVisible = () => {
@@ -125,6 +142,7 @@ function App() {
 
     return () => {
       evtSource.close();
+      clearTimeout(reconnectTimer);
       document.removeEventListener('visibilitychange', onVisible);
     };
   }, [authenticated]);

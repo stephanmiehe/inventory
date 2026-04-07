@@ -1,8 +1,30 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { authFetch } from '../authFetch';
 import ProductFormFields from './ProductFormFields';
 import StoreSelector from './StoreSelector';
 import './Inventory.css';
+
+function LazyItem({ children, height = 200 }) {
+  const ref = useRef(null);
+  const [visible, setVisible] = useState(false);
+
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const observer = new IntersectionObserver(
+      ([entry]) => { if (entry.isIntersecting) { setVisible(true); observer.disconnect(); } },
+      { rootMargin: '200px' }
+    );
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
+
+  if (!visible) {
+    return <div ref={ref} className="inventory-item inventory-item-placeholder" style={{ minHeight: height }} />;
+  }
+
+  return <div ref={ref}>{children}</div>;
+}
 
 function Inventory({ inventory, onRefresh, setInventory }) {
   const [search, setSearch] = useState('');
@@ -166,7 +188,11 @@ function Inventory({ inventory, onRefresh, setInventory }) {
 
       <div className="inventory-grid">
         {sorted.map((item) => (
-          <div key={item.id} className="inventory-item">
+          <LazyItem key={item.id}>
+          <div className={`inventory-item${item.ideal_stock > 0 && item.quantity < item.ideal_stock ? ' low-stock' : ''}`}>
+            {item.ideal_stock > 0 && item.quantity < item.ideal_stock && (
+              <span className="low-stock-badge">Nachkaufen</span>
+            )}
             {editingProduct === item.barcode ? (
               <div className="product-edit-form">
                 <h3>Produkt bearbeiten</h3>
@@ -191,7 +217,7 @@ function Inventory({ inventory, onRefresh, setInventory }) {
               <>
             {item.image_url && (
               <div className="item-image" onClick={() => setZoomImage({ url: item.image_url, name: item.name_de || item.name })}>
-                <img src={item.image_url} alt={item.name} />
+                <img src={item.image_url} alt={item.name} loading="lazy" />
               </div>
             )}
             <div className="item-details">
@@ -252,6 +278,7 @@ function Inventory({ inventory, onRefresh, setInventory }) {
               </>
             )}
           </div>
+          </LazyItem>
         ))}
       </div>
 
