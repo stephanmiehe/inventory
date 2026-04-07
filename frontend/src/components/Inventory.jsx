@@ -189,7 +189,6 @@ function Inventory({ inventory, onRefresh, setInventory }) {
               <h3>{item.name_de || item.name}</h3>
               {item.name_de && <p className="name-original">{item.name}</p>}
               {item.brand && <p className="brand">{item.brand}</p>}
-              <p className="barcode">Barcode: {item.barcode}</p>
               <div className="item-meta">
                 <div className="qty-row">
                   <span className="qty-label">Ist</span>
