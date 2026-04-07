@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { authFetch } from '../authFetch';
 import ProductFormFields from './ProductFormFields';
+import StoreSelector from './StoreSelector';
 import './Inventory.css';
 
 function Inventory({ inventory, onRefresh, setInventory }) {
@@ -99,7 +100,8 @@ function Inventory({ inventory, onRefresh, setInventory }) {
       name_de: item.name_de || '',
       brand: item.brand || '',
       image_url: item.image_url || '',
-      ideal_stock: item.ideal_stock || 0
+      ideal_stock: item.ideal_stock || 0,
+      store: item.store || ''
     });
   };
 
@@ -173,6 +175,12 @@ function Inventory({ inventory, onRefresh, setInventory }) {
                   setFormData={setEditForm}
                   barcode={item.barcode}
                 />
+                <div className="edit-store-section">
+                  <StoreSelector
+                    selected={editForm.store}
+                    onSelect={(store) => setEditForm(prev => ({ ...prev, store }))}
+                  />
+                </div>
                 <div className="edit-actions">
                   <button className="save-btn" onClick={() => handleSaveProduct(item.barcode)}>Speichern</button>
                   <button className="cancel-btn-sm" onClick={() => setEditingProduct(null)}>Abbrechen</button>
