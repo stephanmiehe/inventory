@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import BarcodeScanner from './components/BarcodeScanner';
 import Inventory from './components/Inventory';
 import ShoppingList from './components/ShoppingList';
+import StoreSelector from './components/StoreSelector';
 import { ProductModal, ProductEditForm, ScanOutModal } from './components/ProductModal';
 import { authFetch } from './authFetch';
 import './App.css';
@@ -72,6 +73,9 @@ function App() {
   const [scannedProduct, setScannedProduct] = useState(null);
   const [scannedBarcode, setScannedBarcode] = useState(null);
   const [scanOutMaxQty, setScanOutMaxQty] = useState(1);
+  const [selectedStore, setSelectedStore] = useState(() => {
+    return localStorage.getItem('selectedStore') || '';
+  });
   const [darkMode, setDarkMode] = useState(() => {
     const saved = localStorage.getItem('darkMode');
     if (saved !== null) return saved === 'true';
@@ -194,7 +198,7 @@ function App() {
       const response = await authFetch('/api/inventory/scan-in', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ barcode: scannedBarcode, quantity }),
+        body: JSON.stringify({ barcode: scannedBarcode, quantity, store: selectedStore }),
       });
 
       const data = await response.json();
@@ -331,6 +335,13 @@ function App() {
       <div className="content">
         {activeTab === 'scan-in' && (
           <div className="scanner-container">
+            <StoreSelector
+              selected={selectedStore}
+              onSelect={(store) => {
+                setSelectedStore(store);
+                localStorage.setItem('selectedStore', store);
+              }}
+            />
             <p className="instruction">Barcode eines gekauften Artikels scannen</p>
             {loading && <div className="loading-indicator">Produkt wird gesucht…</div>}
             <BarcodeScanner

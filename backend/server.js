@@ -46,6 +46,13 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_inventory_active ON inventory(barcode, scanned_out);
 `);
 
+// Add store column if missing
+try {
+  db.prepare("SELECT store FROM products LIMIT 0").get();
+} catch {
+  db.exec("ALTER TABLE products ADD COLUMN store TEXT DEFAULT ''");
+}
+
 // --- Middleware ---
 app.use(cors({
   origin: process.env.ALLOWED_ORIGINS || 'http://localhost:3000',
@@ -379,11 +386,11 @@ function getImageUrl(doc) {
 const stmts = {
   getProduct: db.prepare('SELECT * FROM products WHERE barcode = ?'),
   insertProduct: db.prepare(`
-    INSERT INTO products (barcode, name, name_de, brand, image_url, ideal_stock)
-    VALUES (?, ?, ?, ?, ?, ?)
+    INSERT INTO products (barcode, name, name_de, brand, image_url, ideal_stock, store)
+    VALUES (?, ?, ?, ?, ?, ?, ?)
   `),
   updateProduct: db.prepare(`
-    UPDATE products SET name = ?, name_de = ?, brand = ?, image_url = ?, ideal_stock = ?, last_updated = datetime('now')
+    UPDATE products SET name = ?, name_de = ?, brand = ?, image_url = ?, ideal_stock = ?, store = ?, last_updated = datetime('now')
     WHERE barcode = ?
   `),
   insertInventory: db.prepare(`
@@ -397,7 +404,7 @@ const stmts = {
   `),
   getInventory: db.prepare(`
     SELECT 
-      p.id, p.barcode, p.name, p.name_de, p.brand, p.image_url, p.ideal_stock,
+      p.id, p.barcode, p.name, p.name_de, p.brand, p.image_url, p.ideal_stock, p.store,
       COUNT(CASE WHEN i.scanned_out IS NULL THEN 1 END) as quantity,
       MIN(i.scanned_in) as first_added,
       MAX(i.scanned_in) as last_added
@@ -424,7 +431,7 @@ const stmts = {
   `),
   getShoppingList: db.prepare(`
     SELECT 
-      p.id, p.barcode, p.name, p.name_de, p.brand, p.image_url, p.ideal_stock,
+      p.id, p.barcode, p.name, p.name_de, p.brand, p.image_url, p.ideal_stock, p.store,
       COUNT(CASE WHEN i.scanned_out IS NULL THEN 1 END) as current_stock
     FROM products p
     LEFT JOIN inventory i ON p.barcode = i.barcode
@@ -486,7 +493,7 @@ app.post('/api/products/lookup', async (req, res) => {
     } else if (!product.name_de && product.name) {
       const translated = await translateToGerman(product.name);
       if (translated) {
-        stmts.updateProduct.run(product.name, translated, product.brand, product.image_url, product.ideal_stock, barcode);
+        stmts.updateProduct.run(product.name, translated, product.brand, product.image_url, product.ideal_stock, product.store || '', barcode);
         product = stmts.getProduct.get(barcode);
       }
     }
@@ -524,10 +531,12 @@ app.post('/api/products/update', async (req, res) => {
       ? Math.max(0, Math.floor(Number(req.body.ideal_stock) || 0))
       : (product?.ideal_stock || 0);
 
+    const store = req.body.store !== undefined ? (req.body.store || '').trim() : (product?.store || '');
+
     if (!product) {
-      stmts.insertProduct.run(barcode, name, name_de, brand, image_url, idealStock);
+      stmts.insertProduct.run(barcode, name, name_de, brand, image_url, idealStock, store);
     } else {
-      stmts.updateProduct.run(name, name_de, brand, image_url, idealStock, barcode);
+      stmts.updateProduct.run(name, name_de, brand, image_url, idealStock, store, barcode);
     }
     
     product = stmts.getProduct.get(barcode);
@@ -551,6 +560,7 @@ app.post('/api/inventory/scan-in', async (req, res) => {
   }
 
   const count = Math.max(1, Math.min(100, Math.floor(Number(req.body.quantity) || 1)));
+  const store = (req.body.store || '').trim();
 
   try {
     let product = stmts.getProduct.get(barcode);
@@ -562,9 +572,11 @@ app.post('/api/inventory/scan-in', async (req, res) => {
       }
       stmts.insertProduct.run(
         productData.barcode, productData.name, productData.name_de,
-        productData.brand, productData.image_url, 0
+        productData.brand, productData.image_url, 0, store
       );
       product = stmts.getProduct.get(barcode);
+    } else if (store) {
+      db.prepare('UPDATE products SET store = ? WHERE barcode = ?').run(store, barcode);
     }
     
     const insertMany = db.transaction((count) => {
