@@ -4,7 +4,7 @@ const STORES = [
   { id: 'lidl', label: 'Lidl', color: '#0050AA', accent: '#FFF000' },
   { id: 'mercadona', label: 'Mercadona', color: '#00A650', accent: '#fff' },
   { id: 'hiperdino', label: 'HiperDino', color: '#E30613', accent: '#FFDD00' },
-  { id: '', label: 'Andere', color: '#888', accent: '#fff' },
+  { id: 'other', label: 'Andere', color: '#888', accent: '#fff' },
 ];
 
 function parseStores(value) {
@@ -21,10 +21,7 @@ function StoreSelector({ selected, onSelect, multi = false }) {
       return;
     }
     const next = new Set(selectedSet);
-    if (storeId === '') {
-      // "Andere" toggles: if selected, remove it; if not, add it
-      next.has('') ? next.delete('') : next.add('');
-    } else if (next.has(storeId)) {
+    if (next.has(storeId)) {
       next.delete(storeId);
     } else {
       next.add(storeId);
@@ -56,7 +53,7 @@ function StoreSelector({ selected, onSelect, multi = false }) {
               {store.id === 'lidl' && 'L'}
               {store.id === 'mercadona' && 'M'}
               {store.id === 'hiperdino' && 'HD'}
-              {store.id === '' && '?'}
+              {store.id === 'other' && '?'}
             </span>
             <span className="store-name">{store.label}</span>
           </button>

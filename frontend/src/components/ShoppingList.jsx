@@ -3,7 +3,7 @@ import { authFetch } from '../authFetch';
 import { STORES, parseStores } from './StoreSelector';
 import './ShoppingList.css';
 
-const STORE_ORDER = ['lidl', 'mercadona', 'hiperdino', ''];
+const STORE_ORDER = ['lidl', 'mercadona', 'hiperdino', 'other'];
 const storeLabel = (id) => STORES.find(s => s.id === id)?.label || 'Andere';
 const storeColor = (id) => STORES.find(s => s.id === id)?.color || '#888';
 
@@ -82,11 +82,10 @@ function ShoppingList({ refreshKey }) {
   const grouped = {};
   for (const item of items) {
     const stores = parseStores(item.store);
-    const keys = stores.length > 0 ? stores : [''];
+    const keys = stores.length > 0 ? stores : ['other'];
     for (const key of keys) {
-      const normalizedKey = STORE_ORDER.includes(key) ? key : '';
+      const normalizedKey = STORE_ORDER.includes(key) ? key : 'other';
       if (!grouped[normalizedKey]) grouped[normalizedKey] = [];
-      // Avoid duplicates if both '' and an unknown store map to ''
       if (!grouped[normalizedKey].some(i => i.barcode === item.barcode)) {
         grouped[normalizedKey].push(item);
       }
