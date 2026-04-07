@@ -976,6 +976,28 @@ app.delete('/api/groups/:id', (req, res) => {
   }
 });
 
+// Simple German stemmer for grocery product matching
+function stemDE(word) {
+  let w = word.toLowerCase().replace(/[äÄ]/g, 'a').replace(/[öÖ]/g, 'o').replace(/[üÜ]/g, 'u').replace(/ß/g, 'ss');
+  // Strip common German suffixes (longest first)
+  const suffixes = ['ischen', 'ische', 'ungen', 'liche', 'ieren', 'eten', 'enen', 'chen', 'lein', 'isch', 'lich', 'ung', 'ien', 'ten', 'ern', 'eln', 'nen', 'ter', 'tes', 'tem', 'en', 'em', 'er', 'es', 'te', 'el', 'ig', 'nd', 'se', 'en', 'et', 'st', 'e', 's', 'n'];
+  for (const s of suffixes) {
+    if (w.length > s.length + 2 && w.endsWith(s)) {
+      w = w.slice(0, -s.length);
+      break;
+    }
+  }
+  return w;
+}
+
+function tokenize(text) {
+  return text.toLowerCase().split(/[\s,\-\/]+/).filter(w => w.length >= 3);
+}
+
+function stemTokens(tokens) {
+  return tokens.map(stemDE);
+}
+
 // Fuzzy match: find similar products for grouping suggestion
 app.get('/api/products/similar', (req, res) => {
   const barcode = req.query.barcode?.trim();
@@ -986,13 +1008,16 @@ app.get('/api/products/similar', (req, res) => {
     if (!product) return res.json([]);
 
     const name = (product.name_de || product.name || '').toLowerCase();
+    const brand = (product.brand || '').toLowerCase();
     if (!name) return res.json([]);
 
-    // Split into keywords, ignoring very short words
-    const keywords = name.split(/\s+/).filter(w => w.length >= 3);
-    if (keywords.length === 0) return res.json([]);
+    // Build stemmed keyword set from name + brand
+    const nameTokens = tokenize(name);
+    const brandTokens = tokenize(brand);
+    const allStems = stemTokens([...nameTokens, ...brandTokens]);
+    const nameStems = stemTokens(nameTokens);
+    if (nameStems.length === 0) return res.json([]);
 
-    // Find products that share keywords with this product (but aren't this product)
     const allProducts = db.prepare(`
       SELECT p.*, COUNT(CASE WHEN i.scanned_out IS NULL THEN 1 END) as quantity
       FROM products p
@@ -1004,8 +1029,14 @@ app.get('/api/products/similar', (req, res) => {
     const matches = allProducts
       .map(p => {
         const pName = (p.name_de || p.name || '').toLowerCase();
-        const matchCount = keywords.filter(kw => pName.includes(kw)).length;
-        return { ...p, matchScore: matchCount / keywords.length };
+        const pBrand = (p.brand || '').toLowerCase();
+        const pStems = stemTokens([...tokenize(pName), ...tokenize(pBrand)]);
+
+        // Score: how many of our name stems appear in the candidate's stems
+        const matchCount = nameStems.filter(stem =>
+          pStems.some(ps => ps === stem || ps.startsWith(stem) || stem.startsWith(ps))
+        ).length;
+        return { ...p, matchScore: matchCount / nameStems.length };
       })
       .filter(p => p.matchScore >= 0.5)
       .sort((a, b) => b.matchScore - a.matchScore)
