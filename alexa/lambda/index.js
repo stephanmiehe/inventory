@@ -194,12 +194,14 @@ async function pushWidgetData(handlerInput) {
     console.log('Widget data:', JSON.stringify(widgetData));
 
     const dsHost = new URL(apiEndpoint).hostname;
+    console.log('DS target:', dsHost, 'userId:', userId.slice(-12));
     const payload = JSON.stringify({
       commands: [
         { type: 'PUT_OBJECT', namespace: 'SHOPPING_LIST', key: 'listData', content: widgetData },
       ],
       target: { type: 'USER', id: userId },
     });
+    console.log('DS payload:', payload);
 
     await new Promise((resolve) => {
       const req = https.request({
@@ -216,12 +218,11 @@ async function pushWidgetData(handlerInput) {
         let data = '';
         res.on('data', (c) => data += c);
         res.on('end', () => {
-          if (res.statusCode >= 400) console.error('DataStore push error:', res.statusCode, data);
-          else console.log('DataStore push OK:', res.statusCode);
+          console.log('DS response:', res.statusCode, data);
           resolve();
         });
       });
-      req.on('error', (e) => { console.error('DataStore push error:', e); resolve(); });
+      req.on('error', (e) => { console.error('DS request error:', e); resolve(); });
       req.setTimeout(5000, () => { req.destroy(); resolve(); });
       req.write(payload);
       req.end();

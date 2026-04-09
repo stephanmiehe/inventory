@@ -1,0 +1,91 @@
+{
+  "type": "APL",
+  "version": "2024.1",
+  "theme": "dark",
+  "import": [
+    { "name": "alexa-layouts", "version": "1.7.0" }
+  ],
+  "extensions": [
+    {
+      "name": "DataStore",
+      "uri": "alexaext:datastore:10"
+    }
+  ],
+  "settings": {
+    "DataStore": {
+      "dataBindings": [
+        {
+          "namespace": "SHOPPING_LIST",
+          "key": "listData",
+          "dataBindingName": "dsData",
+          "dataType": "OBJECT"
+        }
+      ]
+    }
+  },
+  "mainTemplate": {
+    "parameters": ["defaultData"],
+    "items": [
+      {
+        "type": "Container",
+        "width": "100vw",
+        "height": "100vh",
+        "padding": "8dp",
+        "items": [
+          {
+            "type": "Container",
+            "direction": "row",
+            "alignItems": "center",
+            "spacing": "6dp",
+            "paddingBottom": "4dp",
+            "items": [
+              {
+                "type": "Text",
+                "text": "Einkaufsliste",
+                "fontWeight": "bold",
+                "fontSize": "16dp",
+                "grow": 1
+              },
+              {
+                "type": "Text",
+                "text": "${dsData.total != null ? dsData.total : defaultData.total} Artikel",
+                "fontSize": "13dp",
+                "opacity": 0.7
+              }
+            ]
+          },
+          {
+            "type": "ScrollView",
+            "grow": 1,
+            "shrink": 1,
+            "item": {
+              "type": "Container",
+              "items": [
+                { "when": "${(dsData.lineCount != null ? dsData.lineCount : defaultData.lineCount) > 0}", "type": "Text", "text": "${dsData.line0 != null ? dsData.line0 : defaultData.line0}", "fontSize": "13dp", "maxLines": 1, "paddingTop": "2dp" },
+                { "when": "${(dsData.lineCount != null ? dsData.lineCount : defaultData.lineCount) > 1}", "type": "Text", "text": "${dsData.line1 != null ? dsData.line1 : defaultData.line1}", "fontSize": "13dp", "maxLines": 1, "paddingTop": "2dp" },
+                { "when": "${(dsData.lineCount != null ? dsData.lineCount : defaultData.lineCount) > 2}", "type": "Text", "text": "${dsData.line2 != null ? dsData.line2 : defaultData.line2}", "fontSize": "13dp", "maxLines": 1, "paddingTop": "2dp" },
+                { "when": "${(dsData.lineCount != null ? dsData.lineCount : defaultData.lineCount) > 3}", "type": "Text", "text": "${dsData.line3 != null ? dsData.line3 : defaultData.line3}", "fontSize": "13dp", "maxLines": 1, "paddingTop": "2dp" },
+                { "when": "${(dsData.lineCount != null ? dsData.lineCount : defaultData.lineCount) > 4}", "type": "Text", "text": "${dsData.line4 != null ? dsData.line4 : defaultData.line4}", "fontSize": "13dp", "maxLines": 1, "paddingTop": "2dp" },
+                { "when": "${(dsData.lineCount != null ? dsData.lineCount : defaultData.lineCount) > 5}", "type": "Text", "text": "${dsData.line5 != null ? dsData.line5 : defaultData.line5}", "fontSize": "13dp", "maxLines": 1, "paddingTop": "2dp" },
+                { "when": "${(dsData.lineCount != null ? dsData.lineCount : defaultData.lineCount) > 6}", "type": "Text", "text": "${dsData.line6 != null ? dsData.line6 : defaultData.line6}", "fontSize": "13dp", "maxLines": 1, "paddingTop": "2dp" },
+                { "when": "${(dsData.lineCount != null ? dsData.lineCount : defaultData.lineCount) > 7}", "type": "Text", "text": "${dsData.line7 != null ? dsData.line7 : defaultData.line7}", "fontSize": "13dp", "maxLines": 1, "paddingTop": "2dp" },
+                { "when": "${(dsData.lineCount != null ? dsData.lineCount : defaultData.lineCount) > 8}", "type": "Text", "text": "${dsData.line8 != null ? dsData.line8 : defaultData.line8}", "fontSize": "13dp", "maxLines": 1, "paddingTop": "2dp" },
+                { "when": "${(dsData.lineCount != null ? dsData.lineCount : defaultData.lineCount) > 9}", "type": "Text", "text": "${dsData.line9 != null ? dsData.line9 : defaultData.line9}", "fontSize": "13dp", "maxLines": 1, "paddingTop": "2dp" },
+                { "when": "${(dsData.lineCount != null ? dsData.lineCount : defaultData.lineCount) > 10}", "type": "Text", "text": "${dsData.line10 != null ? dsData.line10 : defaultData.line10}", "fontSize": "13dp", "maxLines": 1, "paddingTop": "2dp" },
+                { "when": "${(dsData.lineCount != null ? dsData.lineCount : defaultData.lineCount) > 11}", "type": "Text", "text": "${dsData.line11 != null ? dsData.line11 : defaultData.line11}", "fontSize": "13dp", "maxLines": 1, "paddingTop": "2dp" }
+              ]
+            }
+          },
+          {
+            "when": "${(dsData.moreCount != null ? dsData.moreCount : defaultData.moreCount) > 0}",
+            "type": "Text",
+            "text": "+ ${dsData.moreCount != null ? dsData.moreCount : defaultData.moreCount} weitere",
+            "fontSize": "12dp",
+            "opacity": 0.5,
+            "paddingTop": "3dp"
+          }
+        ]
+      }
+    ]
+  }
+}
