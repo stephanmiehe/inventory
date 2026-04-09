@@ -3,7 +3,7 @@
   "packageType": "APL_PACKAGE",
   "manifest": {
     "id": "Inventar",
-    "version": "3.0.0",
+    "version": "4.0.0",
     "installStateChanges": "INFORM",
     "updateStateChanges": "INFORM",
     "presentationDefinitions": [

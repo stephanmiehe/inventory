@@ -191,15 +191,14 @@ async function pushWidgetData(handlerInput) {
     const { manual, auto, total } = listRes.data;
     const widgetData = buildWidgetData(manual, auto, total);
     const authHeader = await getDataStoreToken();
+    console.log('Widget data:', JSON.stringify(widgetData));
 
     const dsHost = new URL(apiEndpoint).hostname;
     const payload = JSON.stringify({
-      commands: [{
-        type: 'PUT_OBJECT',
-        namespace: 'SHOPPING_LIST',
-        key: 'listData',
-        content: widgetData,
-      }],
+      commands: [
+        { type: 'REMOVE_OBJECT', namespace: 'SHOPPING_LIST', key: 'listData' },
+        { type: 'PUT_OBJECT', namespace: 'SHOPPING_LIST', key: 'listData', content: widgetData },
+      ],
       target: { type: 'USER', id: userId },
     });
 

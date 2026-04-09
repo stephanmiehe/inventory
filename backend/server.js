@@ -709,12 +709,10 @@ async function pushAlexaWidget() {
 
   const dsHost = new URL(apiEndpoint).hostname;
   const payload = JSON.stringify({
-    commands: [{
-      type: 'PUT_OBJECT',
-      namespace: 'SHOPPING_LIST',
-      key: 'listData',
-      content: widgetData,
-    }],
+    commands: [
+      { type: 'REMOVE_OBJECT', namespace: 'SHOPPING_LIST', key: 'listData' },
+      { type: 'PUT_OBJECT', namespace: 'SHOPPING_LIST', key: 'listData', content: widgetData },
+    ],
     target: { type: 'USER', id: userId },
   });
 
