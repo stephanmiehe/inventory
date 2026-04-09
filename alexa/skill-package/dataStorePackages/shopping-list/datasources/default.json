@@ -1,0 +1,8 @@
+{
+  "shoppingListData": {
+    "type": "object",
+    "total": 0,
+    "items": [],
+    "moreCount": 0
+  }
+}
