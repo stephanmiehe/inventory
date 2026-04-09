@@ -121,35 +121,78 @@ async function addAPLShoppingList(responseBuilder, handlerInput) {
 const MAX_WIDGET_ITEMS = 12;
 
 function buildWidgetData(manual, auto, total) {
-  const items = [];
+  const lines = [];
   for (const i of manual) {
-    items.push({ name: i.name, qty: i.quantity || 1, checked: !!i.checked, icon: i.checked ? '☑' : '☐' });
+    const icon = i.checked ? '[x] ' : '[ ] ';
+    const qty = (i.quantity || 1) > 1 ? `${i.quantity}x ` : '';
+    lines.push(icon + qty + i.name);
   }
   for (const i of auto) {
-    items.push({ name: i.name, qty: i.needed || 1, checked: false, icon: '•' });
+    const qty = (i.needed || 1) > 1 ? `${i.needed}x ` : '';
+    lines.push('- ' + qty + i.name);
   }
-  const moreCount = Math.max(0, items.length - MAX_WIDGET_ITEMS);
-  return {
-    total,
-    items: items.slice(0, MAX_WIDGET_ITEMS),
-    moreCount,
-  };
+  const moreCount = Math.max(0, lines.length - MAX_WIDGET_ITEMS);
+  const result = { total, lineCount: Math.min(lines.length, MAX_WIDGET_ITEMS), moreCount };
+  for (let idx = 0; idx < MAX_WIDGET_ITEMS; idx++) {
+    result[`line${idx}`] = idx < lines.length ? lines[idx] : '';
+  }
+  return result;
+}
+
+// Alexa Skill Messaging credentials (Build → Tools → Permissions)
+const ALEXA_CLIENT_ID = '';
+const ALEXA_CLIENT_SECRET = '';
+
+function getDataStoreToken() {
+  const postData = `grant_type=client_credentials&client_id=${encodeURIComponent(ALEXA_CLIENT_ID)}&client_secret=${encodeURIComponent(ALEXA_CLIENT_SECRET)}&scope=alexa::datastore`;
+  return new Promise((resolve, reject) => {
+    const req = https.request({
+      hostname: 'api.amazon.com',
+      port: 443,
+      path: '/auth/o2/token',
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+        'Content-Length': Buffer.byteLength(postData),
+      },
+    }, (res) => {
+      let body = '';
+      res.on('data', (c) => body += c);
+      res.on('end', () => {
+        if (res.statusCode === 200) {
+          const parsed = JSON.parse(body);
+          resolve(`${parsed.token_type} ${parsed.access_token}`);
+        } else {
+          console.error('DataStore token error:', res.statusCode, body);
+          reject(new Error('Token request failed'));
+        }
+      });
+    });
+    req.on('error', reject);
+    req.setTimeout(5000, () => { req.destroy(); reject(new Error('Token timeout')); });
+    req.write(postData);
+    req.end();
+  });
 }
 
 async function pushWidgetData(handlerInput) {
+  if (!ALEXA_CLIENT_ID || !ALEXA_CLIENT_SECRET) return;
   try {
-    const apiEndpoint = handlerInput.requestEnvelope.context?.System?.apiEndpoint;
-    const apiToken = handlerInput.requestEnvelope.context?.System?.apiAccessToken;
     const userId = handlerInput.requestEnvelope.context?.System?.user?.userId;
-    if (!apiEndpoint || !apiToken || !userId) return;
+    const apiEndpoint = handlerInput.requestEnvelope.context?.System?.apiEndpoint || 'https://api.eu.amazonalexa.com';
+    if (!userId) return;
+
+    // Register userId with backend so it can push widget updates independently
+    apiRequest('POST', '/api/external/alexa-register', { userId, apiEndpoint }).catch(() => {});
 
     const listRes = await apiRequest('GET', '/api/external/shopping-list');
     if (listRes.status !== 200) return;
 
     const { manual, auto, total } = listRes.data;
     const widgetData = buildWidgetData(manual, auto, total);
+    const authHeader = await getDataStoreToken();
 
-    const url = new URL('/v1/datastore/commands', apiEndpoint);
+    const dsHost = new URL(apiEndpoint).hostname;
     const payload = JSON.stringify({
       commands: [{
         type: 'PUT_OBJECT',
@@ -160,15 +203,15 @@ async function pushWidgetData(handlerInput) {
       target: { type: 'USER', id: userId },
     });
 
-    await new Promise((resolve, reject) => {
+    await new Promise((resolve) => {
       const req = https.request({
-        hostname: url.hostname,
+        hostname: dsHost,
         port: 443,
-        path: url.pathname,
+        path: '/v1/datastore/commands',
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${apiToken}`,
+          'Authorization': authHeader,
           'Content-Length': Buffer.byteLength(payload),
         },
       }, (res) => {
@@ -176,6 +219,7 @@ async function pushWidgetData(handlerInput) {
         res.on('data', (c) => data += c);
         res.on('end', () => {
           if (res.statusCode >= 400) console.error('DataStore push error:', res.statusCode, data);
+          else console.log('DataStore push OK:', res.statusCode);
           resolve();
         });
       });
@@ -248,6 +292,35 @@ const WidgetInstalledHandler = {
   },
   async handle(handlerInput) {
     await pushWidgetData(handlerInput);
+    return handlerInput.responseBuilder.getResponse();
+  },
+};
+
+const WidgetRemovedHandler = {
+  canHandle(handlerInput) {
+    return Alexa.getRequestType(handlerInput.requestEnvelope) === 'Alexa.DataStore.PackageManager.UsagesRemoved';
+  },
+  handle(handlerInput) {
+    return handlerInput.responseBuilder.getResponse();
+  },
+};
+
+const WidgetUpdateHandler = {
+  canHandle(handlerInput) {
+    return Alexa.getRequestType(handlerInput.requestEnvelope) === 'Alexa.DataStore.PackageManager.UpdateRequest';
+  },
+  async handle(handlerInput) {
+    await pushWidgetData(handlerInput);
+    return handlerInput.responseBuilder.getResponse();
+  },
+};
+
+const WidgetInstallationErrorHandler = {
+  canHandle(handlerInput) {
+    return Alexa.getRequestType(handlerInput.requestEnvelope) === 'Alexa.DataStore.PackageManager.InstallationError';
+  },
+  handle(handlerInput) {
+    console.error('Widget installation error:', JSON.stringify(handlerInput.requestEnvelope.request));
     return handlerInput.responseBuilder.getResponse();
   },
 };
@@ -562,6 +635,9 @@ const ErrorHandler = {
 exports.handler = Alexa.SkillBuilders.custom()
   .addRequestHandlers(
     WidgetInstalledHandler,
+    WidgetRemovedHandler,
+    WidgetUpdateHandler,
+    WidgetInstallationErrorHandler,
     LaunchRequestHandler,
     AddMultipleItemsIntentHandler,
     AddItemIntentHandler,
