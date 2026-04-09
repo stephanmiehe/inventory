@@ -17,7 +17,7 @@ const http = require('http');
 
 // --- HTTP helper ---
 function apiRequest(method, path, body) {
-  const baseUrl = process.env.API_BASE_URL;
+  const baseUrl = "https://inventory.weidt.de";
   const apiKey = process.env.API_KEY;
 
   if (!baseUrl || !apiKey) {
@@ -86,13 +86,37 @@ const AddItemIntentHandler = {
   },
   async handle(handlerInput) {
     const slots = handlerInput.requestEnvelope.request.intent.slots;
-    const itemName = slots.item?.value;
+    const itemName = cleanSlotText(slots.item?.value || '');
     const quantity = parseInt(slots.quantity?.value, 10) || 1;
 
     if (!itemName) {
       return handlerInput.responseBuilder
         .speak('Was soll ich auf die Liste setzen?')
         .reprompt('Sag zum Beispiel: Füge Milch hinzu.')
+        .getResponse();
+    }
+
+    // AMAZON.Food sometimes captures "zucker und milch" as one item — split if needed
+    const parsed = parseMultipleItems(itemName);
+    if (parsed.length > 1) {
+      try {
+        const res = await apiRequest('POST', '/api/external/shopping-list/add-multiple', {
+          items: parsed.map(name => ({ name })),
+        });
+        if (res.status === 200 && res.data.success) {
+          const parts = res.data.items.map(i =>
+            i.merged ? `${i.name} erhöht auf ${i.newQuantity}` : i.name
+          );
+          return handlerInput.responseBuilder
+            .speak(`${res.data.count} Artikel verarbeitet: ${parts.join(', ')}.`)
+            .reprompt('Möchtest du noch etwas hinzufügen?')
+            .getResponse();
+        }
+      } catch (error) {
+        console.error('API error:', error);
+      }
+      return handlerInput.responseBuilder
+        .speak('Beim Hinzufügen ist ein Fehler aufgetreten.')
         .getResponse();
     }
 
@@ -103,6 +127,12 @@ const AddItemIntentHandler = {
       });
 
       if (res.status === 200 && res.data.success) {
+        if (res.data.merged) {
+          return handlerInput.responseBuilder
+            .speak(`${itemName} war bereits auf der Liste. Menge erhöht auf ${res.data.newQuantity}.`)
+            .reprompt('Möchtest du noch etwas hinzufügen?')
+            .getResponse();
+        }
         const qtyText = quantity > 1 ? `${quantity} mal ` : '';
         return handlerInput.responseBuilder
           .speak(`${qtyText}${itemName} wurde zur Liste hinzugefügt.`)
@@ -122,6 +152,20 @@ const AddItemIntentHandler = {
   },
 };
 
+// Clean AMAZON.SearchQuery values — Alexa sometimes leaks invocation name and
+// carrier words into the captured slot text.
+function cleanSlotText(text) {
+  let cleaned = text;
+  // Strip invocation prefix that sometimes leaks in
+  cleaned = cleaned.replace(/^(sage|frage|öffne|starte|erzähle)\s+inventar\s+/i, '');
+  cleaned = cleaned.replace(/^inventar\s+/i, '');
+  // Strip carrier verbs at the start
+  cleaned = cleaned.replace(/^(füge|notiere|schreib|setze|bitte)\s+/i, '');
+  // Strip carrier suffixes
+  cleaned = cleaned.replace(/\s+(hinzu|hinzufügen|eintragen|auf die liste|auf|bitte)$/i, '');
+  return cleaned.trim();
+}
+
 // Parse multi-item text: "Milch, Brot und Eier" → ["Milch", "Brot", "Eier"]
 function parseMultipleItems(text) {
   return text
@@ -137,7 +181,7 @@ const AddMultipleItemsIntentHandler = {
   },
   async handle(handlerInput) {
     const slots = handlerInput.requestEnvelope.request.intent.slots;
-    const rawText = slots.items?.value;
+    const rawText = cleanSlotText(slots.items?.value || '');
 
     if (!rawText) {
       return handlerInput.responseBuilder
@@ -162,6 +206,12 @@ const AddMultipleItemsIntentHandler = {
           name: items[0],
         });
         if (res.status === 200 && res.data.success) {
+          if (res.data.merged) {
+            return handlerInput.responseBuilder
+              .speak(`${items[0]} war bereits auf der Liste. Menge erhöht auf ${res.data.newQuantity}.`)
+              .reprompt('Möchtest du noch etwas hinzufügen?')
+              .getResponse();
+          }
           return handlerInput.responseBuilder
             .speak(`${items[0]} wurde zur Liste hinzugefügt.`)
             .reprompt('Möchtest du noch etwas hinzufügen?')
@@ -182,10 +232,11 @@ const AddMultipleItemsIntentHandler = {
       });
 
       if (res.status === 200 && res.data.success) {
-        const count = res.data.count;
-        const names = items.join(', ');
+        const parts = res.data.items.map(i =>
+          i.merged ? `${i.name} erhöht auf ${i.newQuantity}` : i.name
+        );
         return handlerInput.responseBuilder
-          .speak(`${count} Artikel wurden hinzugefügt: ${names}.`)
+          .speak(`${res.data.count} Artikel verarbeitet: ${parts.join(', ')}.`)
           .reprompt('Möchtest du noch etwas hinzufügen?')
           .getResponse();
       }

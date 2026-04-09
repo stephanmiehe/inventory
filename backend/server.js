@@ -979,13 +979,24 @@ app.post('/api/shopping-list/manual', (req, res) => {
   const store = (req.body.store || '').trim();
 
   try {
-    const result = db.prepare(
-      'INSERT INTO shopping_list_items (name, quantity, store) VALUES (?, ?, ?)'
-    ).run(name, quantity, store);
+    const existing = db.prepare(
+      'SELECT * FROM shopping_list_items WHERE LOWER(name) = LOWER(?) AND checked = 0'
+    ).get(name);
 
-    const item = db.prepare('SELECT * FROM shopping_list_items WHERE id = ?').get(result.lastInsertRowid);
-    res.json(item);
-    logAction(req, 'Einkauf hinzugefügt', `"${name}" (${quantity}×)`, { productName: name, store, quantity });
+    if (existing) {
+      const newQty = existing.quantity + quantity;
+      db.prepare('UPDATE shopping_list_items SET quantity = ? WHERE id = ?').run(newQty, existing.id);
+      const item = db.prepare('SELECT * FROM shopping_list_items WHERE id = ?').get(existing.id);
+      res.json(item);
+      logAction(req, 'Einkauf erhöht', `"${name}" ${existing.quantity}→${newQty}`, { productName: name, store, quantity: newQty, oldQuantity: existing.quantity });
+    } else {
+      const result = db.prepare(
+        'INSERT INTO shopping_list_items (name, quantity, store) VALUES (?, ?, ?)'
+      ).run(name, quantity, store);
+      const item = db.prepare('SELECT * FROM shopping_list_items WHERE id = ?').get(result.lastInsertRowid);
+      res.json(item);
+      logAction(req, 'Einkauf hinzugefügt', `"${name}" (${quantity}×)`, { productName: name, store, quantity });
+    }
     broadcastChange();
   } catch (error) {
     console.error('Error adding manual item:', error);
@@ -1087,13 +1098,24 @@ app.post('/api/external/shopping-list/add', (req, res) => {
   const store = (req.body.store || '').trim();
 
   try {
-    const result = db.prepare(
-      'INSERT INTO shopping_list_items (name, quantity, store) VALUES (?, ?, ?)'
-    ).run(name, quantity, store);
+    const existing = db.prepare(
+      'SELECT * FROM shopping_list_items WHERE LOWER(name) = LOWER(?) AND checked = 0'
+    ).get(name);
 
-    const item = db.prepare('SELECT * FROM shopping_list_items WHERE id = ?').get(result.lastInsertRowid);
-    res.json({ success: true, item });
-    logAction(req, 'Einkauf hinzugefügt (Alexa)', `"${name}" (${quantity}×)`, { productName: name, store, quantity });
+    if (existing) {
+      const newQty = existing.quantity + quantity;
+      db.prepare('UPDATE shopping_list_items SET quantity = ? WHERE id = ?').run(newQty, existing.id);
+      const item = db.prepare('SELECT * FROM shopping_list_items WHERE id = ?').get(existing.id);
+      res.json({ success: true, item, merged: true, oldQuantity: existing.quantity, newQuantity: newQty });
+      logAction(req, 'Einkauf erhöht (Alexa)', `"${name}" ${existing.quantity}→${newQty}`, { productName: name, store, quantity: newQty, oldQuantity: existing.quantity });
+    } else {
+      const result = db.prepare(
+        'INSERT INTO shopping_list_items (name, quantity, store) VALUES (?, ?, ?)'
+      ).run(name, quantity, store);
+      const item = db.prepare('SELECT * FROM shopping_list_items WHERE id = ?').get(result.lastInsertRowid);
+      res.json({ success: true, item, merged: false });
+      logAction(req, 'Einkauf hinzugefügt (Alexa)', `"${name}" (${quantity}×)`, { productName: name, store, quantity });
+    }
     broadcastChange();
   } catch (error) {
     console.error('Error adding external item:', error);
@@ -1107,28 +1129,36 @@ app.post('/api/external/shopping-list/add-multiple', (req, res) => {
   if (rawItems.length === 0) return res.status(400).json({ error: 'Keine Artikel angegeben' });
 
   try {
-    const added = [];
+    const results = [];
+    const findExisting = db.prepare('SELECT * FROM shopping_list_items WHERE LOWER(name) = LOWER(?) AND checked = 0');
+    const updateQty = db.prepare('UPDATE shopping_list_items SET quantity = ? WHERE id = ?');
     const insertItem = db.prepare('INSERT INTO shopping_list_items (name, quantity, store) VALUES (?, ?, ?)');
     const getItem = db.prepare('SELECT * FROM shopping_list_items WHERE id = ?');
 
-    const insertAll = db.transaction((items) => {
+    const processAll = db.transaction((items) => {
       for (const raw of items) {
         const name = sanitizeString(typeof raw === 'string' ? raw : raw.name);
         if (!name) continue;
         const quantity = typeof raw === 'object' ? Math.max(1, Math.min(100, Math.floor(Number(raw.quantity) || 1))) : 1;
         const store = (typeof raw === 'object' ? (raw.store || '') : '').trim();
-        const result = insertItem.run(name, quantity, store);
-        added.push(getItem.get(result.lastInsertRowid));
+
+        const existing = findExisting.get(name);
+        if (existing) {
+          const newQty = existing.quantity + quantity;
+          updateQty.run(newQty, existing.id);
+          results.push({ name: existing.name, merged: true, oldQuantity: existing.quantity, newQuantity: newQty });
+          logAction(req, 'Einkauf erhöht (Alexa)', `"${name}" ${existing.quantity}→${newQty}`, { productName: name, store, quantity: newQty, oldQuantity: existing.quantity });
+        } else {
+          const result = insertItem.run(name, quantity, store);
+          results.push({ name, merged: false, newQuantity: quantity });
+          logAction(req, 'Einkauf hinzugefügt (Alexa)', `"${name}" (${quantity}×)`, { productName: name, store, quantity });
+        }
       }
     });
-    insertAll(rawItems);
+    processAll(rawItems);
 
-    res.json({ success: true, items: added, count: added.length });
-    if (added.length > 0) {
-      const names = added.map(i => i.name).join(', ');
-      logAction(req, 'Einkäufe hinzugefügt (Alexa)', `${added.length}× hinzugefügt: ${names}`, { quantity: added.length });
-      broadcastChange();
-    }
+    res.json({ success: true, items: results, count: results.length });
+    if (results.length > 0) broadcastChange();
   } catch (error) {
     console.error('Error adding multiple items:', error);
     res.status(500).json({ error: 'Interner Serverfehler' });
