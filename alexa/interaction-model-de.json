@@ -1,0 +1,89 @@
+{
+  "interactionModel": {
+    "languageModel": {
+      "invocationName": "einkaufsliste",
+      "intents": [
+        {
+          "name": "AddItemIntent",
+          "slots": [
+            {
+              "name": "item",
+              "type": "AMAZON.Food"
+            },
+            {
+              "name": "quantity",
+              "type": "AMAZON.NUMBER"
+            }
+          ],
+          "samples": [
+            "füge {item} hinzu",
+            "füge {quantity} {item} hinzu",
+            "setze {item} auf die Liste",
+            "setze {quantity} {item} auf die Liste",
+            "{item} hinzufügen",
+            "{quantity} {item} hinzufügen",
+            "ich brauche {item}",
+            "ich brauche {quantity} {item}",
+            "wir brauchen {item}",
+            "wir brauchen {quantity} {item}",
+            "{item}",
+            "{quantity} {item}",
+            "bitte {item} aufschreiben",
+            "schreib {item} auf",
+            "schreib {quantity} {item} auf",
+            "{item} auf die Einkaufsliste",
+            "{quantity} {item} auf die Einkaufsliste"
+          ]
+        },
+        {
+          "name": "AddMultipleItemsIntent",
+          "slots": [
+            {
+              "name": "items",
+              "type": "AMAZON.SearchQuery"
+            }
+          ],
+          "samples": [
+            "füge {items} hinzu",
+            "setze {items} auf die Liste",
+            "ich brauche {items}",
+            "wir brauchen {items}",
+            "schreib {items} auf",
+            "{items} auf die Einkaufsliste",
+            "{items} hinzufügen"
+          ]
+        },
+        {
+          "name": "ListItemsIntent",
+          "slots": [],
+          "samples": [
+            "was steht auf der Liste",
+            "was steht auf der Einkaufsliste",
+            "was brauchen wir",
+            "was müssen wir kaufen",
+            "lies die Liste vor",
+            "zeig mir die Liste",
+            "Einkaufsliste vorlesen",
+            "was fehlt"
+          ]
+        },
+        {
+          "name": "AMAZON.HelpIntent",
+          "samples": []
+        },
+        {
+          "name": "AMAZON.StopIntent",
+          "samples": []
+        },
+        {
+          "name": "AMAZON.CancelIntent",
+          "samples": []
+        },
+        {
+          "name": "AMAZON.FallbackIntent",
+          "samples": []
+        }
+      ]
+    }
+  }
+}

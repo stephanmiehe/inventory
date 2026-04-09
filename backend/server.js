@@ -140,6 +140,7 @@ app.use('/api/', apiLimiter);
 
 // --- Authentication ---
 const AUTH_PASSWORD = process.env.AUTH_PASSWORD || '';
+const EXTERNAL_API_KEY = process.env.EXTERNAL_API_KEY || '';
 const LOCAL_SUBNETS = (process.env.LOCAL_SUBNETS || '192.168.,10.').split(',');
 const authTokens = new Set();
 
@@ -173,6 +174,10 @@ function authMiddleware(req, res, next) {
 
   const token = req.headers.authorization?.replace('Bearer ', '');
   if (token && authTokens.has(token)) return next();
+
+  // Allow external API key auth
+  const apiKey = req.headers['x-api-key'];
+  if (apiKey && EXTERNAL_API_KEY && apiKey === EXTERNAL_API_KEY) return next();
 
   return res.status(401).json({ error: 'Nicht autorisiert' });
 }
@@ -1067,6 +1072,111 @@ app.post('/api/shopping-list/manual/clear-checked', (req, res) => {
     }
   } catch (error) {
     console.error('Error clearing checked items:', error);
+    res.status(500).json({ error: 'Interner Serverfehler' });
+  }
+});
+
+// --- External API (for Alexa / integrations) ---
+
+// Add item to shopping list
+app.post('/api/external/shopping-list/add', (req, res) => {
+  const name = sanitizeString(req.body.name);
+  if (!name) return res.status(400).json({ error: 'Name ist erforderlich' });
+
+  const quantity = Math.max(1, Math.min(100, Math.floor(Number(req.body.quantity) || 1)));
+  const store = (req.body.store || '').trim();
+
+  try {
+    const result = db.prepare(
+      'INSERT INTO shopping_list_items (name, quantity, store) VALUES (?, ?, ?)'
+    ).run(name, quantity, store);
+
+    const item = db.prepare('SELECT * FROM shopping_list_items WHERE id = ?').get(result.lastInsertRowid);
+    res.json({ success: true, item });
+    logAction(req, 'Einkauf hinzugefügt (Alexa)', `"${name}" (${quantity}×)`, { productName: name, store, quantity });
+    broadcastChange();
+  } catch (error) {
+    console.error('Error adding external item:', error);
+    res.status(500).json({ error: 'Interner Serverfehler' });
+  }
+});
+
+// Add multiple items at once
+app.post('/api/external/shopping-list/add-multiple', (req, res) => {
+  const rawItems = Array.isArray(req.body.items) ? req.body.items : [];
+  if (rawItems.length === 0) return res.status(400).json({ error: 'Keine Artikel angegeben' });
+
+  try {
+    const added = [];
+    const insertItem = db.prepare('INSERT INTO shopping_list_items (name, quantity, store) VALUES (?, ?, ?)');
+    const getItem = db.prepare('SELECT * FROM shopping_list_items WHERE id = ?');
+
+    const insertAll = db.transaction((items) => {
+      for (const raw of items) {
+        const name = sanitizeString(typeof raw === 'string' ? raw : raw.name);
+        if (!name) continue;
+        const quantity = typeof raw === 'object' ? Math.max(1, Math.min(100, Math.floor(Number(raw.quantity) || 1))) : 1;
+        const store = (typeof raw === 'object' ? (raw.store || '') : '').trim();
+        const result = insertItem.run(name, quantity, store);
+        added.push(getItem.get(result.lastInsertRowid));
+      }
+    });
+    insertAll(rawItems);
+
+    res.json({ success: true, items: added, count: added.length });
+    if (added.length > 0) {
+      const names = added.map(i => i.name).join(', ');
+      logAction(req, 'Einkäufe hinzugefügt (Alexa)', `${added.length}× hinzugefügt: ${names}`, { quantity: added.length });
+      broadcastChange();
+    }
+  } catch (error) {
+    console.error('Error adding multiple items:', error);
+    res.status(500).json({ error: 'Interner Serverfehler' });
+  }
+});
+
+// Get shopping list (combined auto + manual)
+app.get('/api/external/shopping-list', (req, res) => {
+  try {
+    // Manual items
+    const manual = db.prepare(
+      'SELECT id, name, quantity, checked, store FROM shopping_list_items WHERE checked = 0 ORDER BY created_at DESC'
+    ).all().map(i => ({ ...i, source: 'manual' }));
+
+    // Auto items (simplified — just names and quantities needed)
+    const allProducts = db.prepare(`
+      SELECT 
+        p.name, p.name_de, p.ideal_stock, p.group_id,
+        g.name_de as group_name_de, g.ideal_stock as group_ideal_stock,
+        COUNT(CASE WHEN i.scanned_out IS NULL THEN 1 END) as current_stock
+      FROM products p
+      LEFT JOIN inventory i ON p.barcode = i.barcode
+      LEFT JOIN product_groups g ON p.group_id = g.id
+      GROUP BY p.barcode
+    `).all();
+
+    const autoItems = [];
+    const processedGroups = new Set();
+    for (const item of allProducts) {
+      if (item.group_id) {
+        if (processedGroups.has(item.group_id)) continue;
+        processedGroups.add(item.group_id);
+        const members = allProducts.filter(p => p.group_id === item.group_id);
+        const totalStock = members.reduce((sum, m) => sum + m.current_stock, 0);
+        const ideal = item.group_ideal_stock || 0;
+        if (ideal > 0 && totalStock < ideal) {
+          autoItems.push({ name: item.group_name_de || item.name_de || item.name, needed: ideal - totalStock, source: 'inventory' });
+        }
+      } else {
+        if (item.ideal_stock > 0 && item.current_stock < item.ideal_stock) {
+          autoItems.push({ name: item.name_de || item.name, needed: item.ideal_stock - item.current_stock, source: 'inventory' });
+        }
+      }
+    }
+
+    res.json({ manual, auto: autoItems, total: manual.length + autoItems.length });
+  } catch (error) {
+    console.error('Error getting external shopping list:', error);
     res.status(500).json({ error: 'Interner Serverfehler' });
   }
 });
