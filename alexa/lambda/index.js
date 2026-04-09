@@ -72,7 +72,7 @@ const LaunchRequestHandler = {
   },
   handle(handlerInput) {
     return handlerInput.responseBuilder
-      .speak('Einkaufsliste ist bereit. Was soll ich hinzufügen?')
+      .speak('Inventar ist bereit. Was soll ich auf die Einkaufsliste setzen?')
       .reprompt('Sag zum Beispiel: Füge Milch hinzu.')
       .getResponse();
   },

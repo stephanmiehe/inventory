@@ -6,10 +6,10 @@ Voice commands to add items to your shopping list and read it back.
 
 | Phrase | Action |
 |---|---|
-| *"Alexa, öffne Einkaufsliste"* | Opens the skill |
+| *"Alexa, öffne Inventar"* | Opens the skill |
 | *"Füge Milch hinzu"* | Adds Milch to the list |
 | *"Füge drei Eier hinzu"* | Adds 3× Eier |
-| *"Ich brauche Milch, Brot und Eier"* | Adds 3 separate items |
+| *"Notiere Milch, Brot und Eier"* | Adds 3 separate items |
 | *"Was steht auf der Liste?"* | Reads back the list |
 
 ## Setup
@@ -29,7 +29,7 @@ Restart the backend after adding it.
 ### 2. Create the Alexa Skill
 
 1. Go to [Alexa Developer Console](https://developer.amazon.com/alexa/console/ask)
-2. **Create Skill** → Name: `Einkaufsliste` → Language: **German (DE)** → Type: **Custom** → Hosting: **Alexa-Hosted (Node.js)**
+2. **Create Skill** → Name: `Inventar` → Language: **German (DE)** → Type: **Custom** → Hosting: **Alexa-Hosted (Node.js)**
 3. In the skill editor, go to **JSON Editor** (left sidebar under Interaction Model)
 4. Paste the contents of `interaction-model-de.json`
 5. Click **Save Model** → **Build Model**
@@ -57,7 +57,7 @@ Restart the backend after adding it.
 
 1. Go to the **Test** tab in the Alexa Developer Console
 2. Enable testing in **Development** mode
-3. Type or say: *"Öffne Einkaufsliste"*
+3. Type or say: *"Öffne Inventar"*
 4. Then: *"Füge Milch hinzu"*
 5. Check your web app — the item should appear on the shopping list
 

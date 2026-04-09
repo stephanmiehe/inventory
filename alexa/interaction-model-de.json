@@ -1,7 +1,7 @@
 {
   "interactionModel": {
     "languageModel": {
-      "invocationName": "einkaufsliste",
+      "invocationName": "inventar",
       "intents": [
         {
           "name": "AddItemIntent",
@@ -22,17 +22,13 @@
             "setze {quantity} {item} auf die Liste",
             "{item} hinzufügen",
             "{quantity} {item} hinzufügen",
-            "ich brauche {item}",
-            "ich brauche {quantity} {item}",
-            "wir brauchen {item}",
-            "wir brauchen {quantity} {item}",
-            "{item}",
-            "{quantity} {item}",
+            "notiere {item}",
+            "notiere {quantity} {item}",
             "bitte {item} aufschreiben",
             "schreib {item} auf",
             "schreib {quantity} {item} auf",
-            "{item} auf die Einkaufsliste",
-            "{quantity} {item} auf die Einkaufsliste"
+            "{item} eintragen",
+            "{quantity} {item} eintragen"
           ]
         },
         {
@@ -46,11 +42,10 @@
           "samples": [
             "füge {items} hinzu",
             "setze {items} auf die Liste",
-            "ich brauche {items}",
-            "wir brauchen {items}",
+            "notiere {items}",
             "schreib {items} auf",
-            "{items} auf die Einkaufsliste",
-            "{items} hinzufügen"
+            "{items} hinzufügen",
+            "{items} eintragen"
           ]
         },
         {
@@ -58,12 +53,10 @@
           "slots": [],
           "samples": [
             "was steht auf der Liste",
-            "was steht auf der Einkaufsliste",
-            "was brauchen wir",
             "was müssen wir kaufen",
             "lies die Liste vor",
             "zeig mir die Liste",
-            "Einkaufsliste vorlesen",
+            "Liste vorlesen",
             "was fehlt"
           ]
         },
