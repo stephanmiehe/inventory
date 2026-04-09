@@ -102,6 +102,18 @@ try { db.prepare("SELECT product_id FROM audit_log LIMIT 0").get(); } catch {
   db.exec("ALTER TABLE audit_log ADD COLUMN old_quantity INTEGER");
 }
 
+// --- Manual Shopping List Items ---
+db.exec(`
+  CREATE TABLE IF NOT EXISTS shopping_list_items (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL,
+    quantity INTEGER DEFAULT 1,
+    store TEXT DEFAULT '',
+    checked INTEGER DEFAULT 0,
+    created_at TEXT DEFAULT (datetime('now'))
+  );
+`);
+
 // Add group_id column if missing
 try {
   db.prepare("SELECT group_id FROM products LIMIT 0").get();
@@ -936,6 +948,125 @@ app.get('/api/shopping-list', (req, res) => {
     res.json(result);
   } catch (error) {
     console.error('Error getting shopping list:', error);
+    res.status(500).json({ error: 'Interner Serverfehler' });
+  }
+});
+
+// --- Manual Shopping List Items ---
+
+// Get manual items
+app.get('/api/shopping-list/manual', (req, res) => {
+  try {
+    const items = db.prepare('SELECT * FROM shopping_list_items ORDER BY checked ASC, created_at DESC').all();
+    res.json(items);
+  } catch (error) {
+    console.error('Error getting manual shopping list:', error);
+    res.status(500).json({ error: 'Interner Serverfehler' });
+  }
+});
+
+// Add manual item
+app.post('/api/shopping-list/manual', (req, res) => {
+  const name = sanitizeString(req.body.name);
+  if (!name) return res.status(400).json({ error: 'Name ist erforderlich' });
+
+  const quantity = Math.max(1, Math.min(100, Math.floor(Number(req.body.quantity) || 1)));
+  const store = (req.body.store || '').trim();
+
+  try {
+    const result = db.prepare(
+      'INSERT INTO shopping_list_items (name, quantity, store) VALUES (?, ?, ?)'
+    ).run(name, quantity, store);
+
+    const item = db.prepare('SELECT * FROM shopping_list_items WHERE id = ?').get(result.lastInsertRowid);
+    res.json(item);
+    logAction(req, 'Einkauf hinzugefügt', `"${name}" (${quantity}×)`, { productName: name, store, quantity });
+    broadcastChange();
+  } catch (error) {
+    console.error('Error adding manual item:', error);
+    res.status(500).json({ error: 'Interner Serverfehler' });
+  }
+});
+
+// Toggle checked
+app.post('/api/shopping-list/manual/toggle', (req, res) => {
+  const id = Number(req.body.id);
+  if (!id) return res.status(400).json({ error: 'ID ist erforderlich' });
+
+  try {
+    const item = db.prepare('SELECT * FROM shopping_list_items WHERE id = ?').get(id);
+    if (!item) return res.status(404).json({ error: 'Eintrag nicht gefunden' });
+
+    const newChecked = item.checked ? 0 : 1;
+    db.prepare('UPDATE shopping_list_items SET checked = ? WHERE id = ?').run(newChecked, id);
+
+    res.json({ ...item, checked: newChecked });
+    logAction(req, newChecked ? 'Einkauf erledigt' : 'Einkauf offen', `"${item.name}"`, { productName: item.name });
+    broadcastChange();
+  } catch (error) {
+    console.error('Error toggling item:', error);
+    res.status(500).json({ error: 'Interner Serverfehler' });
+  }
+});
+
+// Update manual item
+app.post('/api/shopping-list/manual/update', (req, res) => {
+  const id = Number(req.body.id);
+  if (!id) return res.status(400).json({ error: 'ID ist erforderlich' });
+
+  try {
+    const item = db.prepare('SELECT * FROM shopping_list_items WHERE id = ?').get(id);
+    if (!item) return res.status(404).json({ error: 'Eintrag nicht gefunden' });
+
+    const name = sanitizeString(req.body.name) || item.name;
+    const quantity = req.body.quantity !== undefined
+      ? Math.max(1, Math.min(100, Math.floor(Number(req.body.quantity) || 1)))
+      : item.quantity;
+    const store = req.body.store !== undefined ? (req.body.store || '').trim() : item.store;
+
+    db.prepare('UPDATE shopping_list_items SET name = ?, quantity = ?, store = ? WHERE id = ?')
+      .run(name, quantity, store, id);
+
+    res.json(db.prepare('SELECT * FROM shopping_list_items WHERE id = ?').get(id));
+    logAction(req, 'Einkauf bearbeitet', `"${name}"`, { productName: name, quantity });
+    broadcastChange();
+  } catch (error) {
+    console.error('Error updating manual item:', error);
+    res.status(500).json({ error: 'Interner Serverfehler' });
+  }
+});
+
+// Delete manual item
+app.delete('/api/shopping-list/manual/:id', (req, res) => {
+  const id = Number(req.params.id);
+  if (!id) return res.status(400).json({ error: 'Ungültige ID' });
+
+  try {
+    const item = db.prepare('SELECT * FROM shopping_list_items WHERE id = ?').get(id);
+    if (!item) return res.status(404).json({ error: 'Eintrag nicht gefunden' });
+
+    db.prepare('DELETE FROM shopping_list_items WHERE id = ?').run(id);
+    res.json({ message: 'Eintrag gelöscht' });
+    logAction(req, 'Einkauf entfernt', `"${item.name}"`, { productName: item.name });
+    broadcastChange();
+  } catch (error) {
+    console.error('Error deleting manual item:', error);
+    res.status(500).json({ error: 'Interner Serverfehler' });
+  }
+});
+
+// Clear checked manual items
+app.post('/api/shopping-list/manual/clear-checked', (req, res) => {
+  try {
+    const count = db.prepare('SELECT COUNT(*) as c FROM shopping_list_items WHERE checked = 1').get().c;
+    db.prepare('DELETE FROM shopping_list_items WHERE checked = 1').run();
+    res.json({ message: `${count} Einträge entfernt`, count });
+    if (count > 0) {
+      logAction(req, 'Erledigte entfernt', `${count} Einträge`, {});
+      broadcastChange();
+    }
+  } catch (error) {
+    console.error('Error clearing checked items:', error);
     res.status(500).json({ error: 'Interner Serverfehler' });
   }
 });
