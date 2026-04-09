@@ -14,6 +14,119 @@
 const Alexa = require('ask-sdk-core');
 const https = require('https');
 const http = require('http');
+const aplDocument = require('./apl-shopping-list.json');
+
+// --- APL helpers ---
+function supportsAPL(handlerInput) {
+  const interfaces = handlerInput.requestEnvelope.context?.System?.device?.supportedInterfaces;
+  return !!interfaces?.['Alexa.Presentation.APL'];
+}
+
+function buildAPLData(manual, auto, total) {
+  return {
+    subtitle: `${total} Einträge`,
+    hasAuto: auto.length > 0,
+    manualItems: manual.map(i => ({
+      name: i.name,
+      qty: i.quantity || 1,
+      checked: !!i.checked,
+    })),
+    autoItems: auto.map(i => ({
+      name: i.name,
+      needed: i.needed || 1,
+    })),
+  };
+}
+
+async function addAPLShoppingList(responseBuilder, handlerInput) {
+  if (!supportsAPL(handlerInput)) return;
+  try {
+    const res = await apiRequest('GET', '/api/external/shopping-list');
+    if (res.status === 200) {
+      const { manual, auto, total } = res.data;
+      responseBuilder.addDirective({
+        type: 'Alexa.Presentation.APL.RenderDocument',
+        token: 'shoppingListToken',
+        document: aplDocument,
+        datasources: { payload: buildAPLData(manual, auto, total) },
+      });
+    }
+  } catch (e) {
+    console.error('APL fetch error:', e);
+  }
+}
+
+// --- Widget DataStore helpers ---
+const MAX_WIDGET_ITEMS = 12;
+
+function buildWidgetData(manual, auto, total) {
+  const items = [];
+  for (const i of manual) {
+    items.push({ name: i.name, qty: i.quantity || 1, checked: !!i.checked, icon: i.checked ? '☑' : '☐' });
+  }
+  for (const i of auto) {
+    items.push({ name: i.name, qty: i.needed || 1, checked: false, icon: '•' });
+  }
+  const moreCount = Math.max(0, items.length - MAX_WIDGET_ITEMS);
+  return {
+    total,
+    items: items.slice(0, MAX_WIDGET_ITEMS),
+    moreCount,
+  };
+}
+
+async function pushWidgetData(handlerInput) {
+  try {
+    const apiEndpoint = handlerInput.requestEnvelope.context?.System?.apiEndpoint;
+    const apiToken = handlerInput.requestEnvelope.context?.System?.apiAccessToken;
+    const userId = handlerInput.requestEnvelope.context?.System?.user?.userId;
+    if (!apiEndpoint || !apiToken || !userId) return;
+
+    const listRes = await apiRequest('GET', '/api/external/shopping-list');
+    if (listRes.status !== 200) return;
+
+    const { manual, auto, total } = listRes.data;
+    const widgetData = buildWidgetData(manual, auto, total);
+
+    const url = new URL('/v1/datastore/commands', apiEndpoint);
+    const payload = JSON.stringify({
+      commands: [{
+        type: 'PUT_OBJECT',
+        namespace: 'SHOPPING_LIST',
+        key: 'listData',
+        content: widgetData,
+      }],
+      target: { type: 'USER', id: userId },
+    });
+
+    await new Promise((resolve, reject) => {
+      const req = https.request({
+        hostname: url.hostname,
+        port: 443,
+        path: url.pathname,
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${apiToken}`,
+          'Content-Length': Buffer.byteLength(payload),
+        },
+      }, (res) => {
+        let data = '';
+        res.on('data', (c) => data += c);
+        res.on('end', () => {
+          if (res.statusCode >= 400) console.error('DataStore push error:', res.statusCode, data);
+          resolve();
+        });
+      });
+      req.on('error', (e) => { console.error('DataStore push error:', e); resolve(); });
+      req.setTimeout(5000, () => { req.destroy(); resolve(); });
+      req.write(payload);
+      req.end();
+    });
+  } catch (e) {
+    console.error('Widget push error:', e);
+  }
+}
 
 // --- HTTP helper ---
 function apiRequest(method, path, body) {
@@ -67,15 +180,27 @@ function apiRequest(method, path, body) {
 
 // --- Intent Handlers ---
 
+// Widget installed on home screen — push initial data
+const WidgetInstalledHandler = {
+  canHandle(handlerInput) {
+    return Alexa.getRequestType(handlerInput.requestEnvelope) === 'Alexa.DataStore.PackageManager.UsagesInstalled';
+  },
+  async handle(handlerInput) {
+    await pushWidgetData(handlerInput);
+    return handlerInput.responseBuilder.getResponse();
+  },
+};
+
 const LaunchRequestHandler = {
   canHandle(handlerInput) {
     return Alexa.getRequestType(handlerInput.requestEnvelope) === 'LaunchRequest';
   },
-  handle(handlerInput) {
-    return handlerInput.responseBuilder
+  async handle(handlerInput) {
+    const rb = handlerInput.responseBuilder
       .speak('Inventar ist bereit. Was soll ich auf die Liste setzen?')
-      .reprompt('Sag zum Beispiel: Füge Milch hinzu.')
-      .getResponse();
+      .reprompt('Sag zum Beispiel: Füge Milch hinzu.');
+    await addAPLShoppingList(rb, handlerInput);
+    return rb.getResponse();
   },
 };
 
@@ -107,10 +232,11 @@ const AddItemIntentHandler = {
           const parts = res.data.items.map(i =>
             i.merged ? `${i.name} erhöht auf ${i.newQuantity}` : i.name
           );
-          return handlerInput.responseBuilder
+          const rb = handlerInput.responseBuilder
             .speak(`${res.data.count} Artikel verarbeitet: ${parts.join(', ')}.`)
-            .reprompt('Möchtest du noch etwas hinzufügen?')
-            .getResponse();
+            .withShouldEndSession(true);
+          await Promise.all([addAPLShoppingList(rb, handlerInput), pushWidgetData(handlerInput)]);
+          return rb.getResponse();
         }
       } catch (error) {
         console.error('API error:', error);
@@ -127,17 +253,18 @@ const AddItemIntentHandler = {
       });
 
       if (res.status === 200 && res.data.success) {
+        let speech;
         if (res.data.merged) {
-          return handlerInput.responseBuilder
-            .speak(`${itemName} war bereits auf der Liste. Menge erhöht auf ${res.data.newQuantity}.`)
-            .reprompt('Möchtest du noch etwas hinzufügen?')
-            .getResponse();
+          speech = `${itemName} war bereits auf der Liste. Menge erhöht auf ${res.data.newQuantity}.`;
+        } else {
+          const qtyText = quantity > 1 ? `${quantity} mal ` : '';
+          speech = `${qtyText}${itemName} wurde zur Liste hinzugefügt.`;
         }
-        const qtyText = quantity > 1 ? `${quantity} mal ` : '';
-        return handlerInput.responseBuilder
-          .speak(`${qtyText}${itemName} wurde zur Liste hinzugefügt.`)
-          .reprompt('Möchtest du noch etwas hinzufügen?')
-          .getResponse();
+        const rb = handlerInput.responseBuilder
+          .speak(speech)
+          .withShouldEndSession(true);
+        await Promise.all([addAPLShoppingList(rb, handlerInput), pushWidgetData(handlerInput)]);
+        return rb.getResponse();
       } else {
         return handlerInput.responseBuilder
           .speak(`Beim Hinzufügen von ${itemName} ist ein Fehler aufgetreten.`)
@@ -206,16 +333,17 @@ const AddMultipleItemsIntentHandler = {
           name: items[0],
         });
         if (res.status === 200 && res.data.success) {
+          let speech;
           if (res.data.merged) {
-            return handlerInput.responseBuilder
-              .speak(`${items[0]} war bereits auf der Liste. Menge erhöht auf ${res.data.newQuantity}.`)
-              .reprompt('Möchtest du noch etwas hinzufügen?')
-              .getResponse();
+            speech = `${items[0]} war bereits auf der Liste. Menge erhöht auf ${res.data.newQuantity}.`;
+          } else {
+            speech = `${items[0]} wurde zur Liste hinzugefügt.`;
           }
-          return handlerInput.responseBuilder
-            .speak(`${items[0]} wurde zur Liste hinzugefügt.`)
-            .reprompt('Möchtest du noch etwas hinzufügen?')
-            .getResponse();
+          const rb = handlerInput.responseBuilder
+            .speak(speech)
+            .withShouldEndSession(true);
+          await Promise.all([addAPLShoppingList(rb, handlerInput), pushWidgetData(handlerInput)]);
+          return rb.getResponse();
         }
       } catch (error) {
         console.error('API error:', error);
@@ -235,10 +363,11 @@ const AddMultipleItemsIntentHandler = {
         const parts = res.data.items.map(i =>
           i.merged ? `${i.name} erhöht auf ${i.newQuantity}` : i.name
         );
-        return handlerInput.responseBuilder
+        const rb = handlerInput.responseBuilder
           .speak(`${res.data.count} Artikel verarbeitet: ${parts.join(', ')}.`)
-          .reprompt('Möchtest du noch etwas hinzufügen?')
-          .getResponse();
+          .withShouldEndSession(true);
+        await Promise.all([addAPLShoppingList(rb, handlerInput), pushWidgetData(handlerInput)]);
+        return rb.getResponse();
       }
     } catch (error) {
       console.error('API error:', error);
@@ -291,9 +420,17 @@ const ListItemsIntentHandler = {
         speech = `Auf der Liste stehen ${total} Einträge. Die ersten ${maxItems}: ${allItems.slice(0, maxItems).join(', ')}. Und ${total - maxItems} weitere.`;
       }
 
-      return handlerInput.responseBuilder
-        .speak(speech)
-        .getResponse();
+      const rb = handlerInput.responseBuilder.speak(speech);
+      if (supportsAPL(handlerInput)) {
+        rb.addDirective({
+          type: 'Alexa.Presentation.APL.RenderDocument',
+          token: 'shoppingListToken',
+          document: aplDocument,
+          datasources: { payload: buildAPLData(manual, auto, total) },
+        });
+      }
+      await pushWidgetData(handlerInput);
+      return rb.getResponse();
     } catch (error) {
       console.error('API error:', error);
       return handlerInput.responseBuilder
@@ -364,6 +501,7 @@ const ErrorHandler = {
 // --- Skill Builder ---
 exports.handler = Alexa.SkillBuilders.custom()
   .addRequestHandlers(
+    WidgetInstalledHandler,
     LaunchRequestHandler,
     AddMultipleItemsIntentHandler,
     AddItemIntentHandler,
