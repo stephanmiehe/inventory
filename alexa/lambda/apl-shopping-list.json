@@ -13,20 +13,34 @@
         "height": "100vh",
         "items": [
           {
-            "type": "AlexaHeader",
-            "headerTitle": "🛒 Einkaufsliste",
-            "headerSubtitle": "${payload.subtitle}"
+            "type": "Text",
+            "text": "🛒 Einkaufsliste — ${payload.subtitle}",
+            "fontSize": "24dp",
+            "fontWeight": "bold",
+            "paddingLeft": "3vw",
+            "paddingTop": "2vh",
+            "paddingBottom": "1vh"
           },
           {
-            "type": "ScrollView",
-            "grow": 1,
+            "type": "Sequence",
+            "width": "100vw",
+            "height": "85vh",
             "paddingLeft": "3vw",
             "paddingRight": "3vw",
-            "paddingBottom": "2vh",
-            "item": {
-              "type": "Container",
-              "items": "${payload.renderedItems}"
-            }
+            "numbered": false,
+            "data": "${payload.listItems}",
+            "items": [
+              {
+                "type": "Text",
+                "text": "${data.text}",
+                "fontSize": "${data.isHeader ? '20dp' : '22dp'}",
+                "fontWeight": "${data.isHeader ? 'bold' : 'normal'}",
+                "color": "${data.color}",
+                "opacity": "${data.opacity}",
+                "paddingTop": "${data.isHeader ? '2vh' : '0.8vh'}",
+                "paddingBottom": "0.8vh"
+              }
+            ]
           }
         ]
       }

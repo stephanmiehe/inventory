@@ -14,7 +14,6 @@
 const Alexa = require('ask-sdk-core');
 const https = require('https');
 const http = require('http');
-const aplDocument = require('./apl-shopping-list.json');
 
 // --- APL helpers ---
 function supportsAPL(handlerInput) {
@@ -22,65 +21,82 @@ function supportsAPL(handlerInput) {
   return !!interfaces?.['Alexa.Presentation.APL'];
 }
 
-function buildAPLData(manual, auto, total) {
-  const renderedItems = [];
+// Build full APL document with items baked in — no data binding needed
+function buildAPLDocument(manual, auto, total) {
+  const itemComponents = [];
 
   if (manual.length > 0) {
-    renderedItems.push({
-      type: 'Text',
-      text: '📝 Manuell hinzugefügt',
-      fontSize: '20dp',
-      fontWeight: 'bold',
-      color: '#FF9800',
-      paddingTop: '0.5vh',
-      paddingBottom: '0.5vh',
+    itemComponents.push({
+      type: 'Text', text: '📝 Manuell hinzugefügt',
+      fontSize: '20dp', fontWeight: 'bold', color: '#FF9800',
+      paddingTop: '1vh', paddingBottom: '0.5vh'
     });
     for (const i of manual) {
-      const icon = i.checked ? '☑' : '☐';
+      const icon = i.checked ? '☑ ' : '☐ ';
       const qty = (i.quantity || 1) > 1 ? `${i.quantity}× ` : '';
-      renderedItems.push({
-        type: 'Container',
-        direction: 'row',
-        alignItems: 'center',
-        paddingTop: '1vh',
-        paddingBottom: '1vh',
-        items: [
-          { type: 'Text', text: icon, fontSize: '26dp', width: '44dp' },
-          { type: 'Text', text: `${qty}${i.name}`, style: 'textStyleBody', fontSize: '22dp', grow: 1, opacity: i.checked ? 0.4 : 1.0 },
-        ],
+      itemComponents.push({
+        type: 'Text', text: `${icon}${qty}${i.name}`,
+        fontSize: '22dp', color: 'white',
+        opacity: i.checked ? 0.4 : 1,
+        paddingTop: '0.8vh', paddingBottom: '0.8vh'
       });
     }
   }
 
   if (auto.length > 0) {
-    renderedItems.push({
-      type: 'Text',
-      text: '🔄 Nachkaufen (Bestand niedrig)',
-      fontSize: '20dp',
-      fontWeight: 'bold',
-      color: '#2196F3',
-      paddingTop: manual.length > 0 ? '2vh' : '0.5vh',
-      paddingBottom: '0.5vh',
+    itemComponents.push({
+      type: 'Text', text: '🔄 Nachkaufen (Bestand niedrig)',
+      fontSize: '20dp', fontWeight: 'bold', color: '#2196F3',
+      paddingTop: itemComponents.length > 0 ? '2vh' : '1vh', paddingBottom: '0.5vh'
     });
     for (const i of auto) {
       const qty = (i.needed || 1) > 1 ? `${i.needed}× ` : '';
-      renderedItems.push({
-        type: 'Container',
-        direction: 'row',
-        alignItems: 'center',
-        paddingTop: '1vh',
-        paddingBottom: '1vh',
-        items: [
-          { type: 'Text', text: '•', fontSize: '26dp', width: '44dp', color: '#2196F3' },
-          { type: 'Text', text: `${qty}${i.name}`, style: 'textStyleBody', fontSize: '22dp', grow: 1 },
-        ],
+      itemComponents.push({
+        type: 'Text', text: `• ${qty}${i.name}`,
+        fontSize: '22dp', color: 'white',
+        paddingTop: '0.8vh', paddingBottom: '0.8vh'
       });
     }
   }
 
+  if (itemComponents.length === 0) {
+    itemComponents.push({
+      type: 'Text', text: 'Die Einkaufsliste ist leer ✓',
+      fontSize: '22dp', color: '#888', paddingTop: '4vh', textAlign: 'center'
+    });
+  }
+
   return {
-    subtitle: `${total} Einträge`,
-    renderedItems,
+    type: 'APL',
+    version: '2024.1',
+    import: [{ name: 'alexa-layouts', version: '1.7.0' }],
+    mainTemplate: {
+      items: [{
+        type: 'Container',
+        width: '100vw',
+        height: '100vh',
+        items: [
+          {
+            type: 'Text',
+            text: `🛒 Einkaufsliste — ${total} Einträge`,
+            fontSize: '24dp', fontWeight: 'bold',
+            paddingLeft: '3vw', paddingTop: '2vh', paddingBottom: '1vh'
+          },
+          {
+            type: 'ScrollView',
+            width: '100vw',
+            grow: 1,
+            paddingLeft: '3vw',
+            paddingRight: '3vw',
+            paddingBottom: '2vh',
+            item: {
+              type: 'Container',
+              items: itemComponents
+            }
+          }
+        ]
+      }]
+    }
   };
 }
 
@@ -93,8 +109,7 @@ async function addAPLShoppingList(responseBuilder, handlerInput) {
       responseBuilder.addDirective({
         type: 'Alexa.Presentation.APL.RenderDocument',
         token: 'shoppingListToken',
-        document: aplDocument,
-        datasources: { payload: buildAPLData(manual, auto, total) },
+        document: buildAPLDocument(manual, auto, total),
       });
     }
   } catch (e) {
@@ -471,8 +486,7 @@ const ListItemsIntentHandler = {
         rb.addDirective({
           type: 'Alexa.Presentation.APL.RenderDocument',
           token: 'shoppingListToken',
-          document: aplDocument,
-          datasources: { payload: buildAPLData(manual, auto, total) },
+          document: buildAPLDocument(manual, auto, total),
         });
       }
       await pushWidgetData(handlerInput);

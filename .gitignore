@@ -5,3 +5,4 @@ grocery-db.json
 uploads/
 .env
 .DS_Store
+.playwright-mcp
