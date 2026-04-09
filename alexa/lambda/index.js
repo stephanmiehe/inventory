@@ -1,8 +1,9 @@
 /**
- * Alexa Skill Lambda — Einkaufsliste
+ * Alexa Skill Lambda — Inventar
  * 
  * Handles:
  *  - AddItemIntent: adds an item to the shopping list
+ *  - AddMultipleItemsIntent: adds multiple items at once
  *  - ListItemsIntent: reads back the current shopping list
  * 
  * Environment variables (set in Lambda console):
@@ -35,7 +36,7 @@ function apiRequest(method, path, body) {
     headers: {
       'Content-Type': 'application/json',
       'X-API-Key': apiKey,
-      'User-Agent': 'Alexa-Einkaufsliste/1.0',
+      'User-Agent': 'Alexa-Inventar/1.0',
       'X-Device-Name': 'Alexa',
     },
   };
@@ -72,7 +73,7 @@ const LaunchRequestHandler = {
   },
   handle(handlerInput) {
     return handlerInput.responseBuilder
-      .speak('Inventar ist bereit. Was soll ich auf die Einkaufsliste setzen?')
+      .speak('Inventar ist bereit. Was soll ich auf die Liste setzen?')
       .reprompt('Sag zum Beispiel: Füge Milch hinzu.')
       .getResponse();
   },
@@ -104,7 +105,7 @@ const AddItemIntentHandler = {
       if (res.status === 200 && res.data.success) {
         const qtyText = quantity > 1 ? `${quantity} mal ` : '';
         return handlerInput.responseBuilder
-          .speak(`${qtyText}${itemName} wurde zur Einkaufsliste hinzugefügt.`)
+          .speak(`${qtyText}${itemName} wurde zur Liste hinzugefügt.`)
           .reprompt('Möchtest du noch etwas hinzufügen?')
           .getResponse();
       } else {
@@ -162,7 +163,7 @@ const AddMultipleItemsIntentHandler = {
         });
         if (res.status === 200 && res.data.success) {
           return handlerInput.responseBuilder
-            .speak(`${items[0]} wurde zur Einkaufsliste hinzugefügt.`)
+            .speak(`${items[0]} wurde zur Liste hinzugefügt.`)
             .reprompt('Möchtest du noch etwas hinzufügen?')
             .getResponse();
         }
@@ -209,7 +210,7 @@ const ListItemsIntentHandler = {
 
       if (res.status !== 200) {
         return handlerInput.responseBuilder
-          .speak('Beim Laden der Einkaufsliste ist ein Fehler aufgetreten.')
+          .speak('Beim Laden der Liste ist ein Fehler aufgetreten.')
           .getResponse();
       }
 
@@ -217,7 +218,7 @@ const ListItemsIntentHandler = {
 
       if (total === 0) {
         return handlerInput.responseBuilder
-          .speak('Die Einkaufsliste ist leer. Alles auf Lager!')
+          .speak('Die Liste ist leer. Alles auf Lager!')
           .getResponse();
       }
 
@@ -234,9 +235,9 @@ const ListItemsIntentHandler = {
       const maxItems = 15;
       let speech;
       if (allItems.length <= maxItems) {
-        speech = `Auf der Einkaufsliste stehen ${total} Einträge: ${allItems.join(', ')}.`;
+        speech = `Auf der Liste stehen ${total} Einträge: ${allItems.join(', ')}.`;
       } else {
-        speech = `Auf der Einkaufsliste stehen ${total} Einträge. Die ersten ${maxItems}: ${allItems.slice(0, maxItems).join(', ')}. Und ${total - maxItems} weitere.`;
+        speech = `Auf der Liste stehen ${total} Einträge. Die ersten ${maxItems}: ${allItems.slice(0, maxItems).join(', ')}. Und ${total - maxItems} weitere.`;
       }
 
       return handlerInput.responseBuilder
@@ -258,7 +259,7 @@ const HelpIntentHandler = {
   },
   handle(handlerInput) {
     return handlerInput.responseBuilder
-      .speak('Du kannst sagen: Füge Milch hinzu, oder: Was steht auf der Einkaufsliste?')
+      .speak('Du kannst sagen: Füge Milch hinzu, oder: Was steht auf der Liste?')
       .reprompt('Was möchtest du tun?')
       .getResponse();
   },

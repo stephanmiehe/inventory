@@ -1,4 +1,4 @@
-# Alexa Skill — Einkaufsliste
+# Alexa Skill — Inventar
 
 Voice commands to add items to your shopping list and read it back.
 

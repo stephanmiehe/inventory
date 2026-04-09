@@ -1,5 +1,5 @@
 {
-  "name": "einkaufsliste-alexa-skill",
+  "name": "inventar-alexa-skill",
   "version": "1.0.0",
   "description": "Alexa skill for the household inventory shopping list",
   "main": "index.js",

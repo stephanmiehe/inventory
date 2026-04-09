@@ -16,6 +16,8 @@
             }
           ],
           "samples": [
+            "{item}",
+            "{quantity} {item}",
             "füge {item} hinzu",
             "füge {quantity} {item} hinzu",
             "setze {item} auf die Liste",
@@ -40,6 +42,7 @@
             }
           ],
           "samples": [
+            "{items}",
             "füge {items} hinzu",
             "setze {items} auf die Liste",
             "notiere {items}",
