@@ -23,37 +23,64 @@ function supportsAPL(handlerInput) {
 }
 
 function buildAPLData(manual, auto, total) {
-  const allItems = [];
+  const renderedItems = [];
 
   if (manual.length > 0) {
-    allItems.push({ isHeader: true, label: '📝 Manuell hinzugefügt', color: '#FF9800' });
+    renderedItems.push({
+      type: 'Text',
+      text: '📝 Manuell hinzugefügt',
+      fontSize: '20dp',
+      fontWeight: 'bold',
+      color: '#FF9800',
+      paddingTop: '0.5vh',
+      paddingBottom: '0.5vh',
+    });
     for (const i of manual) {
-      allItems.push({
-        isHeader: false,
-        name: i.name,
-        qty: i.quantity || 1,
-        checked: !!i.checked,
-        icon: i.checked ? '☑' : '☐',
+      const icon = i.checked ? '☑' : '☐';
+      const qty = (i.quantity || 1) > 1 ? `${i.quantity}× ` : '';
+      renderedItems.push({
+        type: 'Container',
+        direction: 'row',
+        alignItems: 'center',
+        paddingTop: '1vh',
+        paddingBottom: '1vh',
+        items: [
+          { type: 'Text', text: icon, fontSize: '26dp', width: '44dp' },
+          { type: 'Text', text: `${qty}${i.name}`, style: 'textStyleBody', fontSize: '22dp', grow: 1, opacity: i.checked ? 0.4 : 1.0 },
+        ],
       });
     }
   }
 
   if (auto.length > 0) {
-    allItems.push({ isHeader: true, label: '🔄 Nachkaufen (Bestand niedrig)', color: '#2196F3' });
+    renderedItems.push({
+      type: 'Text',
+      text: '🔄 Nachkaufen (Bestand niedrig)',
+      fontSize: '20dp',
+      fontWeight: 'bold',
+      color: '#2196F3',
+      paddingTop: manual.length > 0 ? '2vh' : '0.5vh',
+      paddingBottom: '0.5vh',
+    });
     for (const i of auto) {
-      allItems.push({
-        isHeader: false,
-        name: i.name,
-        qty: i.needed || 1,
-        checked: false,
-        icon: '•',
+      const qty = (i.needed || 1) > 1 ? `${i.needed}× ` : '';
+      renderedItems.push({
+        type: 'Container',
+        direction: 'row',
+        alignItems: 'center',
+        paddingTop: '1vh',
+        paddingBottom: '1vh',
+        items: [
+          { type: 'Text', text: '•', fontSize: '26dp', width: '44dp', color: '#2196F3' },
+          { type: 'Text', text: `${qty}${i.name}`, style: 'textStyleBody', fontSize: '22dp', grow: 1 },
+        ],
       });
     }
   }
 
   return {
     subtitle: `${total} Einträge`,
-    allItems,
+    renderedItems,
   };
 }
 

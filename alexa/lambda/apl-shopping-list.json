@@ -18,52 +18,14 @@
             "headerSubtitle": "${payload.subtitle}"
           },
           {
-            "type": "Sequence",
-            "height": "100%",
+            "type": "ScrollView",
             "grow": 1,
             "paddingLeft": "3vw",
             "paddingRight": "3vw",
             "paddingBottom": "2vh",
-            "numbered": false,
-            "data": "${payload.allItems}",
             "item": {
               "type": "Container",
-              "items": [
-                {
-                  "when": "${data.isHeader}",
-                  "type": "Text",
-                  "text": "${data.label}",
-                  "fontSize": "20dp",
-                  "fontWeight": "bold",
-                  "color": "${data.color}",
-                  "paddingTop": "${index > 0 ? '2vh' : '0.5vh'}",
-                  "paddingBottom": "0.5vh"
-                },
-                {
-                  "when": "${!data.isHeader}",
-                  "type": "Container",
-                  "direction": "row",
-                  "alignItems": "center",
-                  "paddingTop": "1vh",
-                  "paddingBottom": "1vh",
-                  "items": [
-                    {
-                      "type": "Text",
-                      "text": "${data.icon}",
-                      "fontSize": "26dp",
-                      "width": "44dp"
-                    },
-                    {
-                      "type": "Text",
-                      "text": "${data.qty > 1 ? data.qty + '× ' : ''}${data.name}",
-                      "style": "textStyleBody",
-                      "fontSize": "22dp",
-                      "grow": 1,
-                      "opacity": "${data.checked ? 0.4 : 1.0}"
-                    }
-                  ]
-                }
-              ]
+              "items": "${payload.renderedItems}"
             }
           }
         ]
