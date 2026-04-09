@@ -114,6 +114,14 @@ db.exec(`
   );
 `);
 
+// --- Alexa Widget Config ---
+db.exec(`
+  CREATE TABLE IF NOT EXISTS alexa_config (
+    key TEXT PRIMARY KEY,
+    value TEXT NOT NULL
+  );
+`);
+
 // Add group_id column if missing
 try {
   db.prepare("SELECT group_id FROM products LIMIT 0").get();
@@ -602,6 +610,123 @@ function broadcastChange() {
   for (const client of sseClients) {
     client.write(data);
   }
+  debouncedAlexaPush();
+}
+
+// --- Alexa Widget DataStore Push ---
+const ALEXA_CLIENT_ID = process.env.ALEXA_CLIENT_ID || '';
+const ALEXA_CLIENT_SECRET = process.env.ALEXA_CLIENT_SECRET || '';
+const MAX_WIDGET_ITEMS = 12;
+
+let alexaPushTimer = null;
+function debouncedAlexaPush() {
+  if (!ALEXA_CLIENT_ID || !ALEXA_CLIENT_SECRET) return;
+  if (alexaPushTimer) clearTimeout(alexaPushTimer);
+  alexaPushTimer = setTimeout(() => pushAlexaWidget().catch(() => {}), 2000);
+}
+
+function getAlexaConfig(key) {
+  const row = db.prepare('SELECT value FROM alexa_config WHERE key = ?').get(key);
+  return row?.value || '';
+}
+
+function setAlexaConfig(key, value) {
+  db.prepare('INSERT OR REPLACE INTO alexa_config (key, value) VALUES (?, ?)').run(key, value);
+}
+
+async function getDataStoreToken() {
+  const body = `grant_type=client_credentials&client_id=${encodeURIComponent(ALEXA_CLIENT_ID)}&client_secret=${encodeURIComponent(ALEXA_CLIENT_SECRET)}&scope=alexa::datastore`;
+  const res = await fetch('https://api.amazon.com/auth/o2/token', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body,
+  });
+  if (!res.ok) throw new Error(`Token error: ${res.status}`);
+  const data = await res.json();
+  return `${data.token_type} ${data.access_token}`;
+}
+
+function buildWidgetData(manual, auto, total) {
+  const lines = [];
+  for (const i of manual) {
+    const icon = i.checked ? '[x] ' : '[ ] ';
+    const qty = (i.quantity || 1) > 1 ? `${i.quantity}x ` : '';
+    lines.push(icon + qty + i.name);
+  }
+  for (const i of auto) {
+    const qty = (i.needed || 1) > 1 ? `${i.needed}x ` : '';
+    lines.push('- ' + qty + i.name);
+  }
+  const moreCount = Math.max(0, lines.length - MAX_WIDGET_ITEMS);
+  const result = { total, lineCount: Math.min(lines.length, MAX_WIDGET_ITEMS), moreCount };
+  for (let idx = 0; idx < MAX_WIDGET_ITEMS; idx++) {
+    result[`line${idx}`] = idx < lines.length ? lines[idx] : '';
+  }
+  return result;
+}
+
+async function pushAlexaWidget() {
+  const userId = getAlexaConfig('alexa_user_id');
+  const apiEndpoint = getAlexaConfig('alexa_api_endpoint') || 'https://api.eu.amazonalexa.com';
+  if (!userId) return;
+
+  // Fetch shopping list using same logic as /api/external/shopping-list
+  const manual = db.prepare(
+    'SELECT id, name, quantity, checked, store FROM shopping_list_items WHERE checked = 0 ORDER BY created_at DESC'
+  ).all().map(i => ({ ...i, source: 'manual' }));
+
+  const allProducts = db.prepare(`
+    SELECT 
+      p.name, p.name_de, p.ideal_stock, p.group_id,
+      g.name_de as group_name_de, g.ideal_stock as group_ideal_stock,
+      COUNT(CASE WHEN i.scanned_out IS NULL THEN 1 END) as current_stock
+    FROM products p
+    LEFT JOIN inventory i ON p.barcode = i.barcode
+    LEFT JOIN product_groups g ON p.group_id = g.id
+    GROUP BY p.barcode
+  `).all();
+
+  const autoItems = [];
+  const processedGroups = new Set();
+  for (const item of allProducts) {
+    if (item.group_id) {
+      if (processedGroups.has(item.group_id)) continue;
+      processedGroups.add(item.group_id);
+      const members = allProducts.filter(p => p.group_id === item.group_id);
+      const totalStock = members.reduce((sum, m) => sum + m.current_stock, 0);
+      const ideal = item.group_ideal_stock || 0;
+      if (ideal > 0 && totalStock < ideal) {
+        autoItems.push({ name: item.group_name_de || item.name_de || item.name, needed: ideal - totalStock });
+      }
+    } else if (item.ideal_stock > 0 && item.current_stock < item.ideal_stock) {
+      autoItems.push({ name: item.name_de || item.name, needed: item.ideal_stock - item.current_stock });
+    }
+  }
+
+  const total = manual.length + autoItems.length;
+  const widgetData = buildWidgetData(manual, autoItems, total);
+  const authHeader = await getDataStoreToken();
+
+  const dsHost = new URL(apiEndpoint).hostname;
+  const payload = JSON.stringify({
+    commands: [{
+      type: 'PUT_OBJECT',
+      namespace: 'SHOPPING_LIST',
+      key: 'listData',
+      content: widgetData,
+    }],
+    target: { type: 'USER', id: userId },
+  });
+
+  const res = await fetch(`https://${dsHost}/v1/datastore/commands`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': authHeader,
+    },
+    body: payload,
+  });
+  if (!res.ok) console.error('Alexa DataStore push error:', res.status, await res.text());
 }
 
 // --- API Routes ---
@@ -1207,6 +1332,20 @@ app.get('/api/external/shopping-list', (req, res) => {
     res.json({ manual, auto: autoItems, total: manual.length + autoItems.length });
   } catch (error) {
     console.error('Error getting external shopping list:', error);
+    res.status(500).json({ error: 'Interner Serverfehler' });
+  }
+});
+
+// Alexa widget registration — Lambda calls this to store userId for backend-initiated pushes
+app.post('/api/external/alexa-register', (req, res) => {
+  try {
+    const { userId, apiEndpoint } = req.body;
+    if (!userId) return res.status(400).json({ error: 'userId required' });
+    setAlexaConfig('alexa_user_id', userId);
+    if (apiEndpoint) setAlexaConfig('alexa_api_endpoint', apiEndpoint);
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Error registering Alexa:', error);
     res.status(500).json({ error: 'Interner Serverfehler' });
   }
 });

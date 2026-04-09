@@ -2,8 +2,8 @@
   "packageVersion": "1.0",
   "packageType": "APL_PACKAGE",
   "manifest": {
-    "id": "shopping-list",
-    "version": "1.0.0",
+    "id": "Inventar",
+    "version": "3.0.0",
     "installStateChanges": "INFORM",
     "updateStateChanges": "INFORM",
     "presentationDefinitions": [
@@ -21,9 +21,10 @@
           "targetViewport": "WIDGET_M",
           "metadata": {
             "name": "Einkaufsliste",
-            "description": "Zeigt die aktuelle Einkaufsliste",
+            "description": "Zeigt die aktuelle Einkaufsliste aus dem Inventar",
             "keywords": ["einkaufsliste", "shopping", "inventar"],
-            "iconUri": "https://inventory.weidt.de/icons/icon-192x192.png"
+            "iconUri": "https://inventory.weidt.de/icons/icon-192x192.png",
+            "previews": ["https://inventory.weidt.de/icons/icon-512x512.png"]
           }
         }
       ]
