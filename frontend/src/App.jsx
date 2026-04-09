@@ -73,6 +73,7 @@ function App() {
   const [showEditForm, setShowEditForm] = useState(false);
   const [showScanOutModal, setShowScanOutModal] = useState(false);
   const [updateAvailable, setUpdateAvailable] = useState(false);
+  const [sseRefreshKey, setSseRefreshKey] = useState(0);
   const [scannedProduct, setScannedProduct] = useState(null);
   const [scannedBarcode, setScannedBarcode] = useState(null);
   const [scanOutMaxQty, setScanOutMaxQty] = useState(1);
@@ -153,7 +154,10 @@ function App() {
 
     function connectSSE() {
       evtSource = new EventSource('/api/events');
-      evtSource.onmessage = () => loadInventory();
+      evtSource.onmessage = () => {
+        loadInventory();
+        setSseRefreshKey(k => k + 1);
+      };
       evtSource.onerror = () => {
         evtSource.close();
         reconnectTimer = setTimeout(connectSSE, 5000);
@@ -434,7 +438,7 @@ function App() {
         )}
 
         {activeTab === 'shopping' && (
-          <ShoppingList refreshKey={activeTab === 'shopping' ? Date.now() : 0} />
+          <ShoppingList refreshKey={sseRefreshKey} />
         )}
       </div>
 
