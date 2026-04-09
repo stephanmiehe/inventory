@@ -42,13 +42,14 @@
             }
           ],
           "samples": [
-            "{items}",
             "füge {items} hinzu",
             "setze {items} auf die Liste",
             "notiere {items}",
             "schreib {items} auf",
             "{items} hinzufügen",
-            "{items} eintragen"
+            "{items} eintragen",
+            "bitte {items}",
+            "{items} bitte"
           ]
         },
         {
