@@ -23,6 +23,59 @@
       ]
     }
   },
+  "layouts": {
+    "ChecklistItem": {
+      "parameters": [
+        { "name": "itemIndex", "type": "number" },
+        { "name": "itemType", "type": "string" },
+        { "name": "itemId", "type": "number" },
+        { "name": "itemName", "type": "string" },
+        { "name": "itemChecked", "type": "number" },
+        { "name": "lineCount", "type": "number" }
+      ],
+      "items": [
+        {
+          "when": "${lineCount > itemIndex}",
+          "type": "TouchWrapper",
+          "onPress": [
+            {
+              "type": "SendEvent",
+              "arguments": ["checkItem", "${itemType}", "${itemId}"]
+            }
+          ],
+          "item": {
+            "type": "Container",
+            "direction": "row",
+            "alignItems": "center",
+            "paddingTop": "3dp",
+            "paddingBottom": "3dp",
+            "paddingLeft": "4dp",
+            "paddingRight": "4dp",
+            "items": [
+              {
+                "type": "Frame",
+                "width": "18dp",
+                "height": "18dp",
+                "borderRadius": "${itemType == 'manual' ? '4dp' : '9dp'}",
+                "borderWidth": "2dp",
+                "borderColor": "${itemType == 'manual' ? '#66BB6A' : '#42A5F5'}",
+                "backgroundColor": "${itemChecked ? '#66BB6A' : 'transparent'}"
+              },
+              {
+                "type": "Text",
+                "text": "${itemName}",
+                "fontSize": "15dp",
+                "maxLines": 1,
+                "paddingLeft": "8dp",
+                "grow": 1,
+                "opacity": "${itemChecked ? 0.4 : 1.0}"
+              }
+            ]
+          }
+        }
+      ]
+    }
+  },
   "mainTemplate": {
     "parameters": ["defaultData"],
     "items": [
@@ -61,18 +114,18 @@
             "item": {
               "type": "Container",
               "items": [
-                { "when": "${(dsData.lineCount != null ? dsData.lineCount : defaultData.lineCount) > 0}", "type": "Text", "text": "${dsData.line0 != null ? dsData.line0 : defaultData.line0}", "fontSize": "13dp", "maxLines": 1, "paddingTop": "2dp" },
-                { "when": "${(dsData.lineCount != null ? dsData.lineCount : defaultData.lineCount) > 1}", "type": "Text", "text": "${dsData.line1 != null ? dsData.line1 : defaultData.line1}", "fontSize": "13dp", "maxLines": 1, "paddingTop": "2dp" },
-                { "when": "${(dsData.lineCount != null ? dsData.lineCount : defaultData.lineCount) > 2}", "type": "Text", "text": "${dsData.line2 != null ? dsData.line2 : defaultData.line2}", "fontSize": "13dp", "maxLines": 1, "paddingTop": "2dp" },
-                { "when": "${(dsData.lineCount != null ? dsData.lineCount : defaultData.lineCount) > 3}", "type": "Text", "text": "${dsData.line3 != null ? dsData.line3 : defaultData.line3}", "fontSize": "13dp", "maxLines": 1, "paddingTop": "2dp" },
-                { "when": "${(dsData.lineCount != null ? dsData.lineCount : defaultData.lineCount) > 4}", "type": "Text", "text": "${dsData.line4 != null ? dsData.line4 : defaultData.line4}", "fontSize": "13dp", "maxLines": 1, "paddingTop": "2dp" },
-                { "when": "${(dsData.lineCount != null ? dsData.lineCount : defaultData.lineCount) > 5}", "type": "Text", "text": "${dsData.line5 != null ? dsData.line5 : defaultData.line5}", "fontSize": "13dp", "maxLines": 1, "paddingTop": "2dp" },
-                { "when": "${(dsData.lineCount != null ? dsData.lineCount : defaultData.lineCount) > 6}", "type": "Text", "text": "${dsData.line6 != null ? dsData.line6 : defaultData.line6}", "fontSize": "13dp", "maxLines": 1, "paddingTop": "2dp" },
-                { "when": "${(dsData.lineCount != null ? dsData.lineCount : defaultData.lineCount) > 7}", "type": "Text", "text": "${dsData.line7 != null ? dsData.line7 : defaultData.line7}", "fontSize": "13dp", "maxLines": 1, "paddingTop": "2dp" },
-                { "when": "${(dsData.lineCount != null ? dsData.lineCount : defaultData.lineCount) > 8}", "type": "Text", "text": "${dsData.line8 != null ? dsData.line8 : defaultData.line8}", "fontSize": "13dp", "maxLines": 1, "paddingTop": "2dp" },
-                { "when": "${(dsData.lineCount != null ? dsData.lineCount : defaultData.lineCount) > 9}", "type": "Text", "text": "${dsData.line9 != null ? dsData.line9 : defaultData.line9}", "fontSize": "13dp", "maxLines": 1, "paddingTop": "2dp" },
-                { "when": "${(dsData.lineCount != null ? dsData.lineCount : defaultData.lineCount) > 10}", "type": "Text", "text": "${dsData.line10 != null ? dsData.line10 : defaultData.line10}", "fontSize": "13dp", "maxLines": 1, "paddingTop": "2dp" },
-                { "when": "${(dsData.lineCount != null ? dsData.lineCount : defaultData.lineCount) > 11}", "type": "Text", "text": "${dsData.line11 != null ? dsData.line11 : defaultData.line11}", "fontSize": "13dp", "maxLines": 1, "paddingTop": "2dp" }
+                { "type": "ChecklistItem", "itemIndex": 0, "itemType": "${dsData.type0 != null ? dsData.type0 : defaultData.type0}", "itemId": "${dsData.id0 != null ? dsData.id0 : defaultData.id0}", "itemName": "${dsData.name0 != null ? dsData.name0 : defaultData.name0}", "itemChecked": "${dsData.checked0 != null ? dsData.checked0 : defaultData.checked0}", "lineCount": "${dsData.lineCount != null ? dsData.lineCount : defaultData.lineCount}" },
+                { "type": "ChecklistItem", "itemIndex": 1, "itemType": "${dsData.type1 != null ? dsData.type1 : defaultData.type1}", "itemId": "${dsData.id1 != null ? dsData.id1 : defaultData.id1}", "itemName": "${dsData.name1 != null ? dsData.name1 : defaultData.name1}", "itemChecked": "${dsData.checked1 != null ? dsData.checked1 : defaultData.checked1}", "lineCount": "${dsData.lineCount != null ? dsData.lineCount : defaultData.lineCount}" },
+                { "type": "ChecklistItem", "itemIndex": 2, "itemType": "${dsData.type2 != null ? dsData.type2 : defaultData.type2}", "itemId": "${dsData.id2 != null ? dsData.id2 : defaultData.id2}", "itemName": "${dsData.name2 != null ? dsData.name2 : defaultData.name2}", "itemChecked": "${dsData.checked2 != null ? dsData.checked2 : defaultData.checked2}", "lineCount": "${dsData.lineCount != null ? dsData.lineCount : defaultData.lineCount}" },
+                { "type": "ChecklistItem", "itemIndex": 3, "itemType": "${dsData.type3 != null ? dsData.type3 : defaultData.type3}", "itemId": "${dsData.id3 != null ? dsData.id3 : defaultData.id3}", "itemName": "${dsData.name3 != null ? dsData.name3 : defaultData.name3}", "itemChecked": "${dsData.checked3 != null ? dsData.checked3 : defaultData.checked3}", "lineCount": "${dsData.lineCount != null ? dsData.lineCount : defaultData.lineCount}" },
+                { "type": "ChecklistItem", "itemIndex": 4, "itemType": "${dsData.type4 != null ? dsData.type4 : defaultData.type4}", "itemId": "${dsData.id4 != null ? dsData.id4 : defaultData.id4}", "itemName": "${dsData.name4 != null ? dsData.name4 : defaultData.name4}", "itemChecked": "${dsData.checked4 != null ? dsData.checked4 : defaultData.checked4}", "lineCount": "${dsData.lineCount != null ? dsData.lineCount : defaultData.lineCount}" },
+                { "type": "ChecklistItem", "itemIndex": 5, "itemType": "${dsData.type5 != null ? dsData.type5 : defaultData.type5}", "itemId": "${dsData.id5 != null ? dsData.id5 : defaultData.id5}", "itemName": "${dsData.name5 != null ? dsData.name5 : defaultData.name5}", "itemChecked": "${dsData.checked5 != null ? dsData.checked5 : defaultData.checked5}", "lineCount": "${dsData.lineCount != null ? dsData.lineCount : defaultData.lineCount}" },
+                { "type": "ChecklistItem", "itemIndex": 6, "itemType": "${dsData.type6 != null ? dsData.type6 : defaultData.type6}", "itemId": "${dsData.id6 != null ? dsData.id6 : defaultData.id6}", "itemName": "${dsData.name6 != null ? dsData.name6 : defaultData.name6}", "itemChecked": "${dsData.checked6 != null ? dsData.checked6 : defaultData.checked6}", "lineCount": "${dsData.lineCount != null ? dsData.lineCount : defaultData.lineCount}" },
+                { "type": "ChecklistItem", "itemIndex": 7, "itemType": "${dsData.type7 != null ? dsData.type7 : defaultData.type7}", "itemId": "${dsData.id7 != null ? dsData.id7 : defaultData.id7}", "itemName": "${dsData.name7 != null ? dsData.name7 : defaultData.name7}", "itemChecked": "${dsData.checked7 != null ? dsData.checked7 : defaultData.checked7}", "lineCount": "${dsData.lineCount != null ? dsData.lineCount : defaultData.lineCount}" },
+                { "type": "ChecklistItem", "itemIndex": 8, "itemType": "${dsData.type8 != null ? dsData.type8 : defaultData.type8}", "itemId": "${dsData.id8 != null ? dsData.id8 : defaultData.id8}", "itemName": "${dsData.name8 != null ? dsData.name8 : defaultData.name8}", "itemChecked": "${dsData.checked8 != null ? dsData.checked8 : defaultData.checked8}", "lineCount": "${dsData.lineCount != null ? dsData.lineCount : defaultData.lineCount}" },
+                { "type": "ChecklistItem", "itemIndex": 9, "itemType": "${dsData.type9 != null ? dsData.type9 : defaultData.type9}", "itemId": "${dsData.id9 != null ? dsData.id9 : defaultData.id9}", "itemName": "${dsData.name9 != null ? dsData.name9 : defaultData.name9}", "itemChecked": "${dsData.checked9 != null ? dsData.checked9 : defaultData.checked9}", "lineCount": "${dsData.lineCount != null ? dsData.lineCount : defaultData.lineCount}" },
+                { "type": "ChecklistItem", "itemIndex": 10, "itemType": "${dsData.type10 != null ? dsData.type10 : defaultData.type10}", "itemId": "${dsData.id10 != null ? dsData.id10 : defaultData.id10}", "itemName": "${dsData.name10 != null ? dsData.name10 : defaultData.name10}", "itemChecked": "${dsData.checked10 != null ? dsData.checked10 : defaultData.checked10}", "lineCount": "${dsData.lineCount != null ? dsData.lineCount : defaultData.lineCount}" },
+                { "type": "ChecklistItem", "itemIndex": 11, "itemType": "${dsData.type11 != null ? dsData.type11 : defaultData.type11}", "itemId": "${dsData.id11 != null ? dsData.id11 : defaultData.id11}", "itemName": "${dsData.name11 != null ? dsData.name11 : defaultData.name11}", "itemChecked": "${dsData.checked11 != null ? dsData.checked11 : defaultData.checked11}", "lineCount": "${dsData.lineCount != null ? dsData.lineCount : defaultData.lineCount}" }
               ]
             }
           },

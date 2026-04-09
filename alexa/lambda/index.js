@@ -121,20 +121,29 @@ async function addAPLShoppingList(responseBuilder, handlerInput) {
 const MAX_WIDGET_ITEMS = 12;
 
 function buildWidgetData(manual, auto, total) {
-  const lines = [];
+  const items = [];
   for (const i of manual) {
-    const icon = i.checked ? '[x] ' : '[ ] ';
     const qty = (i.quantity || 1) > 1 ? `${i.quantity}x ` : '';
-    lines.push(icon + qty + i.name);
+    items.push({ type: 'manual', id: i.id, name: qty + i.name, checked: i.checked ? 1 : 0 });
   }
   for (const i of auto) {
     const qty = (i.needed || 1) > 1 ? `${i.needed}x ` : '';
-    lines.push('- ' + qty + i.name);
+    items.push({ type: 'auto', id: 0, name: qty + i.name, checked: 0 });
   }
-  const moreCount = Math.max(0, lines.length - MAX_WIDGET_ITEMS);
-  const result = { total, lineCount: Math.min(lines.length, MAX_WIDGET_ITEMS), moreCount };
+  const moreCount = Math.max(0, items.length - MAX_WIDGET_ITEMS);
+  const result = { total, lineCount: Math.min(items.length, MAX_WIDGET_ITEMS), moreCount };
   for (let idx = 0; idx < MAX_WIDGET_ITEMS; idx++) {
-    result[`line${idx}`] = idx < lines.length ? lines[idx] : '';
+    if (idx < items.length) {
+      result[`type${idx}`] = items[idx].type;
+      result[`id${idx}`] = items[idx].id;
+      result[`name${idx}`] = items[idx].name;
+      result[`checked${idx}`] = items[idx].checked;
+    } else {
+      result[`type${idx}`] = '';
+      result[`id${idx}`] = 0;
+      result[`name${idx}`] = '';
+      result[`checked${idx}`] = 0;
+    }
   }
   return result;
 }
@@ -320,6 +329,33 @@ const WidgetInstallationErrorHandler = {
   },
   handle(handlerInput) {
     console.error('Widget installation error:', JSON.stringify(handlerInput.requestEnvelope.request));
+    return handlerInput.responseBuilder.getResponse();
+  },
+};
+
+// Handle touch events from the widget (e.g., checking off items)
+const WidgetUserEventHandler = {
+  canHandle(handlerInput) {
+    return Alexa.getRequestType(handlerInput.requestEnvelope) === 'Alexa.Presentation.APL.UserEvent';
+  },
+  async handle(handlerInput) {
+    const args = handlerInput.requestEnvelope.request.arguments || [];
+    const action = args[0];
+    const itemType = args[1];
+    const itemId = args[2];
+
+    console.log('Widget UserEvent:', JSON.stringify(args));
+
+    if (action === 'checkItem' && itemType === 'manual' && itemId) {
+      try {
+        await apiRequest('POST', '/api/external/shopping-list/toggle', { id: Number(itemId) });
+      } catch (e) {
+        console.error('Toggle error:', e);
+      }
+    }
+
+    // Push updated widget data after the action
+    await pushWidgetData(handlerInput);
     return handlerInput.responseBuilder.getResponse();
   },
 };
@@ -637,6 +673,7 @@ exports.handler = Alexa.SkillBuilders.custom()
     WidgetRemovedHandler,
     WidgetUpdateHandler,
     WidgetInstallationErrorHandler,
+    WidgetUserEventHandler,
     LaunchRequestHandler,
     AddMultipleItemsIntentHandler,
     AddItemIntentHandler,

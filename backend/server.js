@@ -647,20 +647,29 @@ async function getDataStoreToken() {
 }
 
 function buildWidgetData(manual, auto, total) {
-  const lines = [];
+  const items = [];
   for (const i of manual) {
-    const icon = i.checked ? '[x] ' : '[ ] ';
     const qty = (i.quantity || 1) > 1 ? `${i.quantity}x ` : '';
-    lines.push(icon + qty + i.name);
+    items.push({ type: 'manual', id: i.id, name: qty + i.name, checked: i.checked ? 1 : 0 });
   }
   for (const i of auto) {
     const qty = (i.needed || 1) > 1 ? `${i.needed}x ` : '';
-    lines.push('- ' + qty + i.name);
+    items.push({ type: 'auto', id: 0, name: qty + i.name, checked: 0 });
   }
-  const moreCount = Math.max(0, lines.length - MAX_WIDGET_ITEMS);
-  const result = { total, lineCount: Math.min(lines.length, MAX_WIDGET_ITEMS), moreCount };
+  const moreCount = Math.max(0, items.length - MAX_WIDGET_ITEMS);
+  const result = { total, lineCount: Math.min(items.length, MAX_WIDGET_ITEMS), moreCount };
   for (let idx = 0; idx < MAX_WIDGET_ITEMS; idx++) {
-    result[`line${idx}`] = idx < lines.length ? lines[idx] : '';
+    if (idx < items.length) {
+      result[`type${idx}`] = items[idx].type;
+      result[`id${idx}`] = items[idx].id;
+      result[`name${idx}`] = items[idx].name;
+      result[`checked${idx}`] = items[idx].checked;
+    } else {
+      result[`type${idx}`] = '';
+      result[`id${idx}`] = 0;
+      result[`name${idx}`] = '';
+      result[`checked${idx}`] = 0;
+    }
   }
   return result;
 }
@@ -1343,6 +1352,27 @@ app.post('/api/external/alexa-register', (req, res) => {
     res.json({ success: true });
   } catch (error) {
     console.error('Error registering Alexa:', error);
+    res.status(500).json({ error: 'Interner Serverfehler' });
+  }
+});
+
+// Alexa widget — toggle manual shopping list item (check/uncheck)
+app.post('/api/external/shopping-list/toggle', (req, res) => {
+  const id = Number(req.body.id);
+  if (!id) return res.status(400).json({ error: 'ID required' });
+
+  try {
+    const item = db.prepare('SELECT * FROM shopping_list_items WHERE id = ?').get(id);
+    if (!item) return res.status(404).json({ error: 'Item not found' });
+
+    const newChecked = item.checked ? 0 : 1;
+    db.prepare('UPDATE shopping_list_items SET checked = ? WHERE id = ?').run(newChecked, id);
+
+    res.json({ success: true, id, checked: newChecked });
+    logAction(req, newChecked ? 'Einkauf erledigt' : 'Einkauf offen', `"${item.name}" (Alexa)`, { productName: item.name });
+    broadcastChange();
+  } catch (error) {
+    console.error('Error toggling item via Alexa:', error);
     res.status(500).json({ error: 'Interner Serverfehler' });
   }
 });
