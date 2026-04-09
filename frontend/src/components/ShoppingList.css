@@ -327,3 +327,39 @@
 .sl-item.sl-checked .sl-item-details h3 {
   text-decoration: line-through;
 }
+
+/* Inline editing */
+.sl-tappable {
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.sl-inline-edit {
+  display: flex;
+  flex: 1;
+  gap: 8px;
+  align-items: center;
+  min-width: 0;
+}
+
+.sl-edit-name {
+  flex: 1;
+  min-width: 0;
+  padding: 6px 8px;
+  border: 1px solid var(--accent, #667eea);
+  border-radius: 6px;
+  font-size: 0.95rem;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+}
+
+.sl-edit-qty {
+  width: 48px;
+  padding: 6px 4px;
+  border: 1px solid var(--accent, #667eea);
+  border-radius: 6px;
+  font-size: 0.95rem;
+  text-align: center;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+}

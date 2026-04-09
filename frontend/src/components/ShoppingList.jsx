@@ -16,7 +16,11 @@ function ShoppingList({ refreshKey }) {
   const [showAddForm, setShowAddForm] = useState(false);
   const [addName, setAddName] = useState('');
   const [addQty, setAddQty] = useState(1);
+  const [editingId, setEditingId] = useState(null);
+  const [editName, setEditName] = useState('');
+  const [editQty, setEditQty] = useState(1);
   const addInputRef = useRef(null);
+  const editNameRef = useRef(null);
 
   const loadShoppingList = async () => {
     setError(null);
@@ -107,6 +111,31 @@ function ShoppingList({ refreshKey }) {
     } catch (err) {
       console.error('Error clearing checked:', err);
     }
+  };
+
+  const startEditing = (item) => {
+    setEditingId(item.id);
+    setEditName(item.name);
+    setEditQty(item.quantity);
+    setTimeout(() => editNameRef.current?.focus(), 50);
+  };
+
+  const handleSaveEdit = async () => {
+    if (!editName.trim() || !editingId) return;
+    try {
+      const res = await authFetch('/api/shopping-list/manual/update', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: editingId, name: editName.trim(), quantity: editQty }),
+      });
+      if (res.ok) {
+        const updated = await res.json();
+        setManualItems(prev => prev.map(i => i.id === editingId ? updated : i));
+      }
+    } catch (err) {
+      console.error('Error updating item:', err);
+    }
+    setEditingId(null);
   };
 
   if (loading) {
@@ -242,13 +271,37 @@ function ShoppingList({ refreshKey }) {
                 <button className="sl-check-btn" onClick={() => handleToggleChecked(item)}>
                   <span className="sl-checkbox" />
                 </button>
-                <div className="sl-item-details">
-                  <h3>{item.name}</h3>
-                </div>
-                {item.quantity > 1 && (
-                  <div className="sl-item-qty">
-                    <div className="sl-needed">{item.quantity}×</div>
-                  </div>
+                {editingId === item.id ? (
+                  <>
+                    <form className="sl-inline-edit" onSubmit={(e) => { e.preventDefault(); handleSaveEdit(); }}>
+                      <input
+                        ref={editNameRef}
+                        type="text"
+                        value={editName}
+                        onChange={(e) => setEditName(e.target.value)}
+                        className="sl-edit-name"
+                        onBlur={handleSaveEdit}
+                      />
+                      <input
+                        type="number"
+                        min="1"
+                        max="100"
+                        value={editQty}
+                        onChange={(e) => setEditQty(Math.max(1, Number(e.target.value) || 1))}
+                        className="sl-edit-qty"
+                        onBlur={handleSaveEdit}
+                      />
+                    </form>
+                  </>
+                ) : (
+                  <>
+                    <div className="sl-item-details sl-tappable" onClick={() => startEditing(item)}>
+                      <h3>{item.name}</h3>
+                    </div>
+                    <div className="sl-item-qty sl-tappable" onClick={() => startEditing(item)}>
+                      <div className="sl-needed">{item.quantity}×</div>
+                    </div>
+                  </>
                 )}
                 <button
                   className="sl-remove-btn"
