@@ -23,18 +23,37 @@ function supportsAPL(handlerInput) {
 }
 
 function buildAPLData(manual, auto, total) {
+  const allItems = [];
+
+  if (manual.length > 0) {
+    allItems.push({ isHeader: true, label: '📝 Manuell hinzugefügt', color: '#FF9800' });
+    for (const i of manual) {
+      allItems.push({
+        isHeader: false,
+        name: i.name,
+        qty: i.quantity || 1,
+        checked: !!i.checked,
+        icon: i.checked ? '☑' : '☐',
+      });
+    }
+  }
+
+  if (auto.length > 0) {
+    allItems.push({ isHeader: true, label: '🔄 Nachkaufen (Bestand niedrig)', color: '#2196F3' });
+    for (const i of auto) {
+      allItems.push({
+        isHeader: false,
+        name: i.name,
+        qty: i.needed || 1,
+        checked: false,
+        icon: '•',
+      });
+    }
+  }
+
   return {
     subtitle: `${total} Einträge`,
-    hasAuto: auto.length > 0,
-    manualItems: manual.map(i => ({
-      name: i.name,
-      qty: i.quantity || 1,
-      checked: !!i.checked,
-    })),
-    autoItems: auto.map(i => ({
-      name: i.name,
-      needed: i.needed || 1,
-    })),
+    allItems,
   };
 }
 

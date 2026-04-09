@@ -1,6 +1,6 @@
 {
   "type": "APL",
-  "version": "2023.4",
+  "version": "2024.1",
   "import": [
     { "name": "alexa-layouts", "version": "1.7.0" }
   ],
@@ -18,114 +18,53 @@
             "headerSubtitle": "${payload.subtitle}"
           },
           {
-            "type": "Container",
+            "type": "Sequence",
+            "height": "100%",
             "grow": 1,
-            "shrink": 1,
-            "direction": "row",
-            "paddingLeft": "2vw",
-            "paddingRight": "2vw",
+            "paddingLeft": "3vw",
+            "paddingRight": "3vw",
             "paddingBottom": "2vh",
-            "items": [
-              {
-                "type": "Container",
-                "width": "${payload.hasAuto ? '50%' : '100%'}",
-                "paddingRight": "${payload.hasAuto ? '1vw' : '0'}",
-                "items": [
-                  {
-                    "type": "Text",
-                    "text": "Manuell hinzugefügt",
-                    "style": "textStyleDisplay6",
-                    "color": "#FF9800",
-                    "paddingBottom": "1vh"
-                  },
-                  {
-                    "when": "${payload.manualItems.length == 0}",
-                    "type": "Text",
-                    "text": "Keine manuellen Einträge",
-                    "style": "textStyleBody",
-                    "opacity": 0.6
-                  },
-                  {
-                    "type": "Sequence",
-                    "grow": 1,
-                    "shrink": 1,
-                    "numbered": false,
-                    "data": "${payload.manualItems}",
-                    "items": [
-                      {
-                        "type": "Container",
-                        "direction": "row",
-                        "alignItems": "center",
-                        "paddingTop": "0.8vh",
-                        "paddingBottom": "0.8vh",
-                        "items": [
-                          {
-                            "type": "Text",
-                            "text": "${data.checked ? '☑' : '☐'}",
-                            "fontSize": "28dp",
-                            "width": "40dp"
-                          },
-                          {
-                            "type": "Text",
-                            "text": "${data.qty > 1 ? data.qty + '× ' : ''}${data.name}",
-                            "style": "textStyleBody",
-                            "grow": 1,
-                            "opacity": "${data.checked ? 0.4 : 1.0}",
-                            "textDecoration": "${data.checked ? 'line-through' : 'none'}"
-                          }
-                        ]
-                      }
-                    ]
-                  }
-                ]
-              },
-              {
-                "when": "${payload.hasAuto}",
-                "type": "Container",
-                "width": "50%",
-                "paddingLeft": "1vw",
-                "items": [
-                  {
-                    "type": "Text",
-                    "text": "Nachkaufen (Bestand niedrig)",
-                    "style": "textStyleDisplay6",
-                    "color": "#2196F3",
-                    "paddingBottom": "1vh"
-                  },
-                  {
-                    "type": "Sequence",
-                    "grow": 1,
-                    "shrink": 1,
-                    "numbered": false,
-                    "data": "${payload.autoItems}",
-                    "items": [
-                      {
-                        "type": "Container",
-                        "direction": "row",
-                        "alignItems": "center",
-                        "paddingTop": "0.8vh",
-                        "paddingBottom": "0.8vh",
-                        "items": [
-                          {
-                            "type": "Text",
-                            "text": "•",
-                            "fontSize": "28dp",
-                            "width": "40dp",
-                            "color": "#2196F3"
-                          },
-                          {
-                            "type": "Text",
-                            "text": "${data.needed > 1 ? data.needed + '× ' : ''}${data.name}",
-                            "style": "textStyleBody",
-                            "grow": 1
-                          }
-                        ]
-                      }
-                    ]
-                  }
-                ]
-              }
-            ]
+            "numbered": false,
+            "data": "${payload.allItems}",
+            "item": {
+              "type": "Container",
+              "items": [
+                {
+                  "when": "${data.isHeader}",
+                  "type": "Text",
+                  "text": "${data.label}",
+                  "fontSize": "20dp",
+                  "fontWeight": "bold",
+                  "color": "${data.color}",
+                  "paddingTop": "${index > 0 ? '2vh' : '0.5vh'}",
+                  "paddingBottom": "0.5vh"
+                },
+                {
+                  "when": "${!data.isHeader}",
+                  "type": "Container",
+                  "direction": "row",
+                  "alignItems": "center",
+                  "paddingTop": "1vh",
+                  "paddingBottom": "1vh",
+                  "items": [
+                    {
+                      "type": "Text",
+                      "text": "${data.icon}",
+                      "fontSize": "26dp",
+                      "width": "44dp"
+                    },
+                    {
+                      "type": "Text",
+                      "text": "${data.qty > 1 ? data.qty + '× ' : ''}${data.name}",
+                      "style": "textStyleBody",
+                      "fontSize": "22dp",
+                      "grow": 1,
+                      "opacity": "${data.checked ? 0.4 : 1.0}"
+                    }
+                  ]
+                }
+              ]
+            }
           }
         ]
       }
