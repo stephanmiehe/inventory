@@ -124,11 +124,11 @@ function buildWidgetData(manual, auto, total) {
   const items = [];
   for (const i of manual) {
     const qty = (i.quantity || 1) > 1 ? `${i.quantity}x ` : '';
-    items.push({ type: 'manual', id: i.id, name: qty + i.name, checked: i.checked ? 1 : 0 });
+    items.push({ type: 'manual', id: String(i.id), name: qty + i.name, checked: i.checked ? 1 : 0 });
   }
   for (const i of auto) {
     const qty = (i.needed || 1) > 1 ? `${i.needed}x ` : '';
-    items.push({ type: 'auto', id: 0, name: qty + i.name, checked: 0 });
+    items.push({ type: 'auto', id: i.identifier || '', name: qty + i.name, checked: 0 });
   }
   const moreCount = Math.max(0, items.length - MAX_WIDGET_ITEMS);
   const result = { total, lineCount: Math.min(items.length, MAX_WIDGET_ITEMS), moreCount };
@@ -140,7 +140,7 @@ function buildWidgetData(manual, auto, total) {
       result[`checked${idx}`] = items[idx].checked;
     } else {
       result[`type${idx}`] = '';
-      result[`id${idx}`] = 0;
+      result[`id${idx}`] = '';
       result[`name${idx}`] = '';
       result[`checked${idx}`] = 0;
     }
@@ -244,7 +244,7 @@ async function pushWidgetData(handlerInput) {
 // --- HTTP helper ---
 function apiRequest(method, path, body) {
   const baseUrl = "https://inventory.weidt.de";
-  const apiKey = process.env.API_KEY;
+  const apiKey = "73hBg367rgdhd47GBdusdb74bf8cx6db4p";
 
   if (!baseUrl || !apiKey) {
     return Promise.reject(new Error('API_BASE_URL or API_KEY not configured'));
@@ -346,11 +346,11 @@ const WidgetUserEventHandler = {
 
     console.log('Widget UserEvent:', JSON.stringify(args));
 
-    if (action === 'checkItem' && itemType === 'manual' && itemId) {
+    if (action === 'checkItem' && itemId) {
       try {
-        await apiRequest('POST', '/api/external/shopping-list/toggle', { id: Number(itemId) });
+        await apiRequest('POST', '/api/external/shopping-list/remove', { type: itemType, id: itemId });
       } catch (e) {
-        console.error('Toggle error:', e);
+        console.error('Remove error:', e);
       }
     }
 
