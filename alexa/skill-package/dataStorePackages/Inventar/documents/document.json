@@ -35,7 +35,7 @@
       ],
       "items": [
         {
-          "when": "${itemName != '' && lineCount > itemIndex}",
+          "when": "${lineCount > itemIndex}",
           "type": "TouchWrapper",
           "onPress": [
             {
@@ -47,7 +47,8 @@
             "type": "Container",
             "direction": "row",
             "alignItems": "center",
-            "height": "44dp",
+            "height": "${itemName ? '44dp' : '0dp'}",
+            "opacity": "${itemName ? 1 : 0}",
             "paddingLeft": "6dp",
             "paddingRight": "6dp",
             "items": [
