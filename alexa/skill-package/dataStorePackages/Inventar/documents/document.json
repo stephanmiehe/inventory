@@ -28,14 +28,14 @@
       "parameters": [
         { "name": "itemIndex", "type": "number" },
         { "name": "itemType", "type": "string" },
-        { "name": "itemId", "type": "number" },
+        { "name": "itemId", "type": "string" },
         { "name": "itemName", "type": "string" },
         { "name": "itemChecked", "type": "number" },
         { "name": "lineCount", "type": "number" }
       ],
       "items": [
         {
-          "when": "${lineCount > itemIndex}",
+          "when": "${itemName != '' && lineCount > itemIndex}",
           "type": "TouchWrapper",
           "onPress": [
             {
@@ -47,26 +47,25 @@
             "type": "Container",
             "direction": "row",
             "alignItems": "center",
-            "paddingTop": "3dp",
-            "paddingBottom": "3dp",
-            "paddingLeft": "4dp",
-            "paddingRight": "4dp",
+            "height": "44dp",
+            "paddingLeft": "6dp",
+            "paddingRight": "6dp",
             "items": [
               {
                 "type": "Frame",
-                "width": "18dp",
-                "height": "18dp",
-                "borderRadius": "${itemType == 'manual' ? '4dp' : '9dp'}",
+                "width": "20dp",
+                "height": "20dp",
+                "borderRadius": "10dp",
                 "borderWidth": "2dp",
-                "borderColor": "${itemType == 'manual' ? '#66BB6A' : '#42A5F5'}",
+                "borderColor": "${itemChecked ? '#66BB6A' : 'rgba(255,255,255,0.5)'}",
                 "backgroundColor": "${itemChecked ? '#66BB6A' : 'transparent'}"
               },
               {
                 "type": "Text",
                 "text": "${itemName}",
-                "fontSize": "15dp",
+                "fontSize": "16dp",
                 "maxLines": 1,
-                "paddingLeft": "8dp",
+                "paddingLeft": "10dp",
                 "grow": 1,
                 "opacity": "${itemChecked ? 0.4 : 1.0}"
               }
