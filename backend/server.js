@@ -650,11 +650,11 @@ function buildWidgetData(manual, auto, total) {
   const items = [];
   for (const i of manual) {
     const qty = (i.quantity || 1) > 1 ? `${i.quantity}x ` : '';
-    items.push({ type: 'manual', id: i.id, name: qty + i.name, checked: i.checked ? 1 : 0 });
+    items.push({ type: 'manual', id: String(i.id), name: qty + i.name, checked: i.checked ? 1 : 0 });
   }
   for (const i of auto) {
     const qty = (i.needed || 1) > 1 ? `${i.needed}x ` : '';
-    items.push({ type: 'auto', id: 0, name: qty + i.name, checked: 0 });
+    items.push({ type: 'auto', id: i.identifier || '', name: qty + i.name, checked: 0 });
   }
   const moreCount = Math.max(0, items.length - MAX_WIDGET_ITEMS);
   const result = { total, lineCount: Math.min(items.length, MAX_WIDGET_ITEMS), moreCount };
@@ -666,7 +666,7 @@ function buildWidgetData(manual, auto, total) {
       result[`checked${idx}`] = items[idx].checked;
     } else {
       result[`type${idx}`] = '';
-      result[`id${idx}`] = 0;
+      result[`id${idx}`] = '';
       result[`name${idx}`] = '';
       result[`checked${idx}`] = 0;
     }
@@ -686,7 +686,7 @@ async function pushAlexaWidget() {
 
   const allProducts = db.prepare(`
     SELECT 
-      p.name, p.name_de, p.ideal_stock, p.group_id,
+      p.barcode, p.name, p.name_de, p.ideal_stock, p.group_id,
       g.name_de as group_name_de, g.ideal_stock as group_ideal_stock,
       COUNT(CASE WHEN i.scanned_out IS NULL THEN 1 END) as current_stock
     FROM products p
@@ -705,10 +705,10 @@ async function pushAlexaWidget() {
       const totalStock = members.reduce((sum, m) => sum + m.current_stock, 0);
       const ideal = item.group_ideal_stock || 0;
       if (ideal > 0 && totalStock < ideal) {
-        autoItems.push({ name: item.group_name_de || item.name_de || item.name, needed: ideal - totalStock });
+        autoItems.push({ name: item.group_name_de || item.name_de || item.name, needed: ideal - totalStock, identifier: `g:${item.group_id}` });
       }
     } else if (item.ideal_stock > 0 && item.current_stock < item.ideal_stock) {
-      autoItems.push({ name: item.name_de || item.name, needed: item.ideal_stock - item.current_stock });
+      autoItems.push({ name: item.name_de || item.name, needed: item.ideal_stock - item.current_stock, identifier: item.barcode });
     }
   }
 
@@ -1304,10 +1304,10 @@ app.get('/api/external/shopping-list', (req, res) => {
       'SELECT id, name, quantity, checked, store FROM shopping_list_items WHERE checked = 0 ORDER BY created_at DESC'
     ).all().map(i => ({ ...i, source: 'manual' }));
 
-    // Auto items (simplified — just names and quantities needed)
+    // Auto items with identifiers for widget removal
     const allProducts = db.prepare(`
       SELECT 
-        p.name, p.name_de, p.ideal_stock, p.group_id,
+        p.barcode, p.name, p.name_de, p.ideal_stock, p.group_id,
         g.name_de as group_name_de, g.ideal_stock as group_ideal_stock,
         COUNT(CASE WHEN i.scanned_out IS NULL THEN 1 END) as current_stock
       FROM products p
@@ -1326,11 +1326,11 @@ app.get('/api/external/shopping-list', (req, res) => {
         const totalStock = members.reduce((sum, m) => sum + m.current_stock, 0);
         const ideal = item.group_ideal_stock || 0;
         if (ideal > 0 && totalStock < ideal) {
-          autoItems.push({ name: item.group_name_de || item.name_de || item.name, needed: ideal - totalStock, source: 'inventory' });
+          autoItems.push({ name: item.group_name_de || item.name_de || item.name, needed: ideal - totalStock, source: 'inventory', identifier: `g:${item.group_id}` });
         }
       } else {
         if (item.ideal_stock > 0 && item.current_stock < item.ideal_stock) {
-          autoItems.push({ name: item.name_de || item.name, needed: item.ideal_stock - item.current_stock, source: 'inventory' });
+          autoItems.push({ name: item.name_de || item.name, needed: item.ideal_stock - item.current_stock, source: 'inventory', identifier: item.barcode });
         }
       }
     }
@@ -1357,22 +1357,57 @@ app.post('/api/external/alexa-register', (req, res) => {
 });
 
 // Alexa widget — toggle manual shopping list item (check/uncheck)
-app.post('/api/external/shopping-list/toggle', (req, res) => {
-  const id = Number(req.body.id);
-  if (!id) return res.status(400).json({ error: 'ID required' });
+app.post('/api/external/shopping-list/remove', (req, res) => {
+  const type = req.body.type;
+  const id = req.body.id;
+  if (!type || !id) return res.status(400).json({ error: 'type and id required' });
 
   try {
-    const item = db.prepare('SELECT * FROM shopping_list_items WHERE id = ?').get(id);
-    if (!item) return res.status(404).json({ error: 'Item not found' });
+    if (type === 'manual') {
+      const item = db.prepare('SELECT * FROM shopping_list_items WHERE id = ?').get(Number(id));
+      if (!item) return res.status(404).json({ error: 'Item not found' });
 
-    const newChecked = item.checked ? 0 : 1;
-    db.prepare('UPDATE shopping_list_items SET checked = ? WHERE id = ?').run(newChecked, id);
+      db.prepare('DELETE FROM shopping_list_items WHERE id = ?').run(Number(id));
+      res.json({ success: true });
+      logAction(req, 'Einkauf entfernt', `"${item.name}" (Alexa Widget)`, { productName: item.name });
+      broadcastChange();
+    } else if (type === 'auto') {
+      if (id.startsWith('g:')) {
+        // Group — set group ideal_stock = total current stock
+        const groupId = Number(id.slice(2));
+        const group = db.prepare('SELECT * FROM product_groups WHERE id = ?').get(groupId);
+        if (!group) return res.status(404).json({ error: 'Group not found' });
 
-    res.json({ success: true, id, checked: newChecked });
-    logAction(req, newChecked ? 'Einkauf erledigt' : 'Einkauf offen', `"${item.name}" (Alexa)`, { productName: item.name });
-    broadcastChange();
+        const members = db.prepare(`
+          SELECT COUNT(CASE WHEN i.scanned_out IS NULL THEN 1 END) as current_stock
+          FROM products p
+          LEFT JOIN inventory i ON p.barcode = i.barcode
+          WHERE p.group_id = ?
+        `).all(groupId);
+        const totalStock = members.reduce((sum, m) => sum + m.current_stock, 0);
+
+        db.prepare('UPDATE product_groups SET ideal_stock = ? WHERE id = ?').run(totalStock, groupId);
+        res.json({ success: true });
+        logAction(req, 'Soll angepasst', `Gruppe "${group.name_de || group.name}" → ${totalStock} (Alexa Widget)`, { groupId });
+        broadcastChange();
+      } else {
+        // Individual product — set ideal_stock = current_stock
+        const product = db.prepare('SELECT * FROM products WHERE barcode = ?').get(id);
+        if (!product) return res.status(404).json({ error: 'Product not found' });
+
+        const inv = db.prepare('SELECT COUNT(*) as cnt FROM inventory WHERE barcode = ? AND scanned_out IS NULL').get(id);
+        const currentStock = inv.cnt;
+
+        db.prepare('UPDATE products SET ideal_stock = ? WHERE barcode = ?').run(currentStock, id);
+        res.json({ success: true });
+        logAction(req, 'Soll angepasst', `"${product.name_de || product.name}" → ${currentStock} (Alexa Widget)`, { barcode: id });
+        broadcastChange();
+      }
+    } else {
+      return res.status(400).json({ error: 'Unknown type' });
+    }
   } catch (error) {
-    console.error('Error toggling item via Alexa:', error);
+    console.error('Error removing item via Alexa widget:', error);
     res.status(500).json({ error: 'Interner Serverfehler' });
   }
 });
