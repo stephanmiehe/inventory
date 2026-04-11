@@ -100,15 +100,29 @@ function Inventory({ inventory, onRefresh, setInventory }) {
     return () => clearTimeout(timer);
   }, [search]);
 
-  // Dismiss keyboard on scroll (mobile)
+  // Dismiss keyboard on intentional scroll (mobile)
   useEffect(() => {
+    let lastY = window.scrollY;
+    let ignoreUntil = 0;
+    const onFocus = (e) => {
+      if (e.target === searchInputRef.current) {
+        lastY = window.scrollY;
+        ignoreUntil = Date.now() + 400;
+      }
+    };
     const onScroll = () => {
-      if (document.activeElement === searchInputRef.current) {
+      if (document.activeElement !== searchInputRef.current) return;
+      if (Date.now() < ignoreUntil) { lastY = window.scrollY; return; }
+      if (Math.abs(window.scrollY - lastY) > 10) {
         searchInputRef.current.blur();
       }
     };
+    window.addEventListener('focusin', onFocus, { passive: true });
     window.addEventListener('scroll', onScroll, { passive: true });
-    return () => window.removeEventListener('scroll', onScroll);
+    return () => {
+      window.removeEventListener('focusin', onFocus);
+      window.removeEventListener('scroll', onScroll);
+    };
   }, []);
 
   // Auto-focus search when inventory tab is shown
