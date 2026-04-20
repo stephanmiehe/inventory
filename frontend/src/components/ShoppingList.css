@@ -363,3 +363,99 @@
   background: var(--bg-primary);
   color: var(--text-primary);
 }
+
+/* Auto-item edit button */
+.sl-edit-btn {
+  flex-shrink: 0;
+  width: 32px;
+  height: 32px;
+  border: none;
+  background: var(--bg-secondary);
+  color: var(--text-muted);
+  border-radius: 50%;
+  cursor: pointer;
+  font-size: 0.85rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+}
+
+.sl-edit-btn:hover {
+  background: var(--accent, #667eea);
+  color: white;
+}
+
+/* Auto-item edit form */
+.sl-edit-form {
+  width: 100%;
+}
+
+.sl-edit-form h3 {
+  margin: 0 0 12px 0;
+  font-size: 1rem;
+  color: var(--text-primary);
+}
+
+.sl-edit-field {
+  margin-bottom: 10px;
+}
+
+.sl-edit-field label {
+  display: block;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+  margin-bottom: 4px;
+}
+
+.sl-edit-input {
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  font-size: 0.9rem;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  box-sizing: border-box;
+}
+
+.sl-edit-input:focus {
+  border-color: var(--accent, #667eea);
+  outline: none;
+}
+
+.sl-edit-store-section {
+  margin: 10px 0;
+}
+
+.sl-edit-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.sl-save-btn {
+  background: var(--accent, #667eea);
+  color: #fff;
+  border: none;
+  padding: 8px 20px;
+  border-radius: 8px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.sl-cancel-btn {
+  background: var(--bg-secondary);
+  color: var(--text-secondary);
+  border: none;
+  padding: 8px 16px;
+  border-radius: 8px;
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+
+.sl-cancel-btn:hover {
+  background: var(--border-color);
+}

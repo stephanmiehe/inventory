@@ -1,6 +1,8 @@
 import { useState, useEffect, useRef } from 'react';
 import { authFetch } from '../authFetch';
 import { STORES, parseStores } from './StoreSelector';
+import StoreSelector from './StoreSelector';
+import ProductFormFields from './ProductFormFields';
 import './ShoppingList.css';
 
 const STORE_ORDER = ['lidl', 'mercadona', 'hiperdino', 'other'];
@@ -19,6 +21,9 @@ function ShoppingList({ refreshKey }) {
   const [editingId, setEditingId] = useState(null);
   const [editName, setEditName] = useState('');
   const [editQty, setEditQty] = useState(1);
+  const [editingAutoItem, setEditingAutoItem] = useState(null);
+  const [editAutoForm, setEditAutoForm] = useState({ name: '', name_de: '', brand: '', image_url: '', ideal_stock: 0, store: '' });
+  const [editGroupForm, setEditGroupForm] = useState({ name: '', name_de: '', image_url: '', ideal_stock: 0 });
   const addInputRef = useRef(null);
   const editNameRef = useRef(null);
 
@@ -136,6 +141,56 @@ function ShoppingList({ refreshKey }) {
       console.error('Error updating item:', err);
     }
     setEditingId(null);
+  };
+
+  const startEditingAutoItem = (item) => {
+    if (item.is_group) {
+      setEditingAutoItem(`group-${item.group_id}`);
+      setEditGroupForm({
+        name: item.name || '',
+        name_de: item.name_de || '',
+        image_url: item.image_url || '',
+        ideal_stock: item.ideal_stock || 0,
+      });
+    } else {
+      setEditingAutoItem(item.barcode);
+      setEditAutoForm({
+        name: item.name || '',
+        name_de: item.name_de || '',
+        brand: item.brand || '',
+        image_url: item.image_url || '',
+        ideal_stock: item.ideal_stock || 0,
+        store: item.store || '',
+      });
+    }
+  };
+
+  const handleSaveAutoItem = async (item) => {
+    try {
+      if (item.is_group) {
+        const res = await authFetch('/api/groups/update', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ group_id: Number(String(item.group_id)), ...editGroupForm }),
+        });
+        if (res.ok) {
+          setEditingAutoItem(null);
+          loadShoppingList();
+        }
+      } else {
+        const res = await authFetch('/api/products/update', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ barcode: item.barcode, ...editAutoForm }),
+        });
+        if (res.ok) {
+          setEditingAutoItem(null);
+          loadShoppingList();
+        }
+      }
+    } catch (err) {
+      console.error('Error updating item:', err);
+    }
   };
 
   if (loading) {
@@ -357,34 +412,76 @@ function ShoppingList({ refreshKey }) {
           <div className="sl-items">
             {grouped[storeId].map((item) => (
               <div key={item.id || item.barcode} className="sl-item">
-                {item.image_url && (
-                  <div className="sl-item-image" onClick={() => setZoomImage({ url: item.image_url, name: item.name_de || item.name })}>
-                    <img src={item.image_url} alt={item.name} loading="lazy" />
+                {editingAutoItem === (item.is_group ? `group-${item.group_id}` : item.barcode) ? (
+                  <div className="sl-edit-form">
+                    <h3>Produkt bearbeiten</h3>
+                    {item.is_group ? (
+                      <>
+                        <div className="sl-edit-field">
+                          <label>Name</label>
+                          <input className="sl-edit-input" value={editGroupForm.name} onChange={(e) => setEditGroupForm(prev => ({ ...prev, name: e.target.value }))} />
+                        </div>
+                        <div className="sl-edit-field">
+                          <label>Deutscher Name</label>
+                          <input className="sl-edit-input" value={editGroupForm.name_de || ''} onChange={(e) => setEditGroupForm(prev => ({ ...prev, name_de: e.target.value }))} />
+                        </div>
+                        <div className="sl-edit-field">
+                          <label>Soll-Bestand</label>
+                          <input type="number" min="0" className="sl-edit-input" value={editGroupForm.ideal_stock} onChange={(e) => setEditGroupForm(prev => ({ ...prev, ideal_stock: Math.max(0, parseInt(e.target.value) || 0) }))} />
+                        </div>
+                      </>
+                    ) : (
+                      <>
+                        <ProductFormFields formData={editAutoForm} setFormData={setEditAutoForm} barcode={item.barcode} />
+                        <div className="sl-edit-store-section">
+                          <StoreSelector selected={editAutoForm.store} onSelect={(store) => setEditAutoForm(prev => ({ ...prev, store }))} multi />
+                        </div>
+                      </>
+                    )}
+                    <div className="sl-edit-actions">
+                      <button className="sl-save-btn" onClick={() => handleSaveAutoItem(item)}>Speichern</button>
+                      <button className="sl-cancel-btn" onClick={() => setEditingAutoItem(null)}>Abbrechen</button>
+                    </div>
                   </div>
+                ) : (
+                  <>
+                    {item.image_url && (
+                      <div className="sl-item-image" onClick={() => setZoomImage({ url: item.image_url, name: item.name_de || item.name })}>
+                        <img src={item.image_url} alt={item.name} loading="lazy" />
+                      </div>
+                    )}
+                    <div className="sl-item-details">
+                      <h3>
+                        {item.name_de || item.name}
+                        {item.is_group && <span className="sl-group-badge">{item.members?.length} Varianten</span>}
+                      </h3>
+                      {!item.is_group && item.name_de && item.name_de.toLowerCase() !== item.name.toLowerCase() && (
+                        <p className="sl-original-name">{item.name}</p>
+                      )}
+                      {item.brand && <p className="sl-brand">{item.brand}</p>}
+                    </div>
+                    <div className="sl-item-qty">
+                      <div className="sl-needed">+{item.needed}</div>
+                      <div className="sl-stock-info">
+                        {item.current_stock} / {item.ideal_stock}
+                      </div>
+                    </div>
+                    <button
+                      className="sl-edit-btn"
+                      onClick={() => startEditingAutoItem(item)}
+                      title="Bearbeiten"
+                    >
+                      ✏️
+                    </button>
+                    <button
+                      className="sl-remove-btn"
+                      onClick={() => handleRemoveFromList(item)}
+                      title="Von der Einkaufsliste entfernen"
+                    >
+                      ✕
+                    </button>
+                  </>
                 )}
-                <div className="sl-item-details">
-                  <h3>
-                    {item.name_de || item.name}
-                    {item.is_group && <span className="sl-group-badge">{item.members?.length} Varianten</span>}
-                  </h3>
-                  {!item.is_group && item.name_de && item.name_de.toLowerCase() !== item.name.toLowerCase() && (
-                    <p className="sl-original-name">{item.name}</p>
-                  )}
-                  {item.brand && <p className="sl-brand">{item.brand}</p>}
-                </div>
-                <div className="sl-item-qty">
-                  <div className="sl-needed">+{item.needed}</div>
-                  <div className="sl-stock-info">
-                    {item.current_stock} / {item.ideal_stock}
-                  </div>
-                </div>
-                <button
-                  className="sl-remove-btn"
-                  onClick={() => handleRemoveFromList(item)}
-                  title="Von der Einkaufsliste entfernen"
-                >
-                  ✕
-                </button>
               </div>
             ))}
           </div>
